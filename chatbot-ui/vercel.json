@@ -1,10 +1,9 @@
 {
   "functions": {
-    "api/a.js": {
-      "runtime": "nodejs18.x"
+    "api/*.js": {
+      "runtime": "@vercel/node@2.9.0"
     }
-  }
-  ,
+  },
   "headers": [
     {
       "source": "/(.*)",
