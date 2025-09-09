@@ -158,7 +158,8 @@ function Chat() {
     setMessages((prev) => [...prev, userMessage])
 
     // If status is empty or file_uploaded, don't call LLM, just ask for file
-    if (status === '' || status === 'file_uploaded') {
+    if (status == '')
+    {
       askForFile()
       return
     }
@@ -231,7 +232,7 @@ function Chat() {
         </div>
       )}
 
-      {showColumnSelector && (
+      {setStatus==='file_uploaded' && (
         <div className="column-selector-section">
           <div className="column-selector-container">
             <div className="column-selector-header">
