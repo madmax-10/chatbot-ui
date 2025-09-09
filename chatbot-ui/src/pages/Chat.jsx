@@ -3,11 +3,13 @@ import { useLocation } from 'react-router-dom'
 
 function Chat() {
   const [messages, setMessages] = useState([
-    { id: 'm-0', role: 'assistant', content: 'Hi! I\'m your assistant. Ask me anything.' }
+    { id: 'm-0', role: 'assistant', content: 'Please enter the file.' }
   ])
   const [input, setInput] = useState('')
   const [isGenerating, setIsGenerating] = useState(false)
   const [partial, setPartial] = useState('')
+  const [status, setStatus] = useState('')
+  const [csvHeaders, setCsvHeaders] = useState([])
   const messagesEndRef = useRef(null)
   const inputRef = useRef(null)
   const location = useLocation()
@@ -26,25 +28,6 @@ function Chat() {
       if (canSend) onSend()
     }
   }
-  async function a(){
-    const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        "Authorization": "Bearer ",
-        "Content-Type": "application/json"
-      },
-      body: JSON.stringify({
-        "model": "deepseek/deepseek-chat-v3.1:free",
-        "messages": [
-          {
-            "role": "user",
-            "content": "What is the meaning of life?"
-          }
-        ]
-      })
-    });
-    const data = await response.json();
-  }
 
   useEffect(() => {
     if (!inputRef.current) return
@@ -52,6 +35,36 @@ function Chat() {
     el.style.height = 'auto'
     el.style.height = Math.min(el.scrollHeight, 200) + 'px'
   }, [input])
+
+  function handleFileUpload(event) {
+    const file = event.target.files[0]
+    if (!file) return
+
+    if (file.type !== 'text/csv' && !file.name.endsWith('.csv')) {
+      alert('Please upload a CSV file')
+      return
+    }
+
+    const reader = new FileReader()
+    reader.onload = (e) => {
+      const text = e.target.result
+      const lines = text.split('\n')
+      if (lines.length > 0) {
+        const headers = lines[0].split(',').map(header => header.trim().replace(/"/g, ''))
+        setCsvHeaders(headers)
+        setStatus('file_uploaded')
+        
+        // Add a message showing the headers
+        const headerMessage = { 
+          id: crypto.randomUUID(), 
+          role: 'assistant', 
+          content: `File uploaded successfully! Found ${headers.length} columns: ${headers.join(', ')}` 
+        }
+        setMessages(prev => [...prev, headerMessage])
+      }
+    }
+    reader.readAsText(file)
+  }
 
   async function callLLM(userText) {
     try {
@@ -96,6 +109,17 @@ function Chat() {
     const userMessage = { id: crypto.randomUUID(), role: 'user', content }
     setMessages((prev) => [...prev, userMessage])
 
+    // If status is empty, don't call LLM, just ask for file
+    if (status === '') {
+      const fileRequestMessage = { 
+        id: crypto.randomUUID(), 
+        role: 'assistant', 
+        content: 'Please upload a CSV file first using the file uploader below.' 
+      }
+      setMessages((prev) => [...prev, fileRequestMessage])
+      return
+    }
+
     setIsGenerating(true)
     setPartial('')
 
@@ -133,6 +157,36 @@ function Chat() {
           <div ref={messagesEndRef} />
         </div>
       </main>
+
+      {status === '' && (
+        <div className="csv-uploader-section">
+          <div className="csv-uploader-container">
+            <div className="csv-uploader-header">
+              <h3>Upload CSV File</h3>
+              <p>Please upload a CSV file to get started</p>
+            </div>
+            <div className="file-input-wrapper">
+              <input
+                type="file"
+                accept=".csv"
+                onChange={handleFileUpload}
+                id="csv-upload"
+                className="file-input"
+              />
+              <label htmlFor="csv-upload" className="file-input-label">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                  <polyline points="14,2 14,8 20,8"/>
+                  <line x1="16" y1="13" x2="8" y2="13"/>
+                  <line x1="16" y1="17" x2="8" y2="17"/>
+                  <polyline points="10,9 9,9 8,9"/>
+                </svg>
+                Choose CSV File
+              </label>
+            </div>
+          </div>
+        </div>
+      )}
 
       <footer className="chat-input-bar">
         <div className="chat-input-container">

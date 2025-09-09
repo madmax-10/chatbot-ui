@@ -174,3 +174,62 @@
   border-color: #4b5563;
   box-shadow: 0 8px 18px rgba(0,0,0,0.35);
 }
+
+/* CSV Uploader */
+.csv-uploader-section {
+  border-top: 1px solid #2a2a2a;
+  background: linear-gradient(180deg, rgba(21,21,21,0.9), #151515 30%);
+  padding: 20px 16px;
+}
+
+.csv-uploader-container {
+  max-width: 800px;
+  margin: 0 auto;
+  text-align: center;
+}
+
+.csv-uploader-header h3 {
+  margin: 0 0 8px 0;
+  color: #e5e7eb;
+  font-size: 18px;
+  font-weight: 600;
+}
+
+.csv-uploader-header p {
+  margin: 0 0 20px 0;
+  color: #9ca3af;
+  font-size: 14px;
+}
+
+.file-input-wrapper {
+  display: inline-block;
+}
+
+.file-input {
+  display: none;
+}
+
+.file-input-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 20px;
+  background: linear-gradient(180deg, #0f0f0f, #0b0b0b);
+  border: 1px solid #30363d;
+  border-radius: 10px;
+  color: #e5e7eb;
+  cursor: pointer;
+  transition: transform 120ms ease, box-shadow 180ms ease, border-color 180ms ease;
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.file-input-label:hover {
+  transform: translateY(-1px);
+  border-color: #4b5563;
+  box-shadow: 0 8px 18px rgba(0,0,0,0.35);
+}
+
+.file-input-label svg {
+  color: #6b7280;
+}
