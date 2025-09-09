@@ -10,6 +10,8 @@ function Chat() {
   const [partial, setPartial] = useState('')
   const [status, setStatus] = useState('')
   const [csvHeaders, setCsvHeaders] = useState([])
+  const [selectedColumnsToDrop, setSelectedColumnsToDrop] = useState([])
+  const [showColumnSelector, setShowColumnSelector] = useState(false)
   const messagesEndRef = useRef(null)
   const inputRef = useRef(null)
   const location = useLocation()
@@ -53,12 +55,13 @@ function Chat() {
         const headers = lines[0].split(',').map(header => header.trim().replace(/"/g, ''))
         setCsvHeaders(headers)
         setStatus('file_uploaded')
+        setShowColumnSelector(true)
         
         // Add a message showing the headers
         const headerMessage = { 
           id: crypto.randomUUID(), 
           role: 'assistant', 
-          content: `File uploaded successfully! Found ${headers.length} columns: ${headers.join(', ')}` 
+          content: `File uploaded successfully! Found ${headers.length} columns: ${headers.join(', ')}. Please select which columns you want to drop.` 
         }
         setMessages(prev => [...prev, headerMessage])
       }
@@ -100,6 +103,51 @@ function Chat() {
       onChunk(token)
     }
   }
+  function askForFile(){
+    const fileRequestMessage = { 
+      id: crypto.randomUUID(), 
+      role: 'assistant', 
+      content: 'Please upload a CSV file first using the file uploader below.' 
+    }
+    setMessages((prev) => [...prev, fileRequestMessage])
+    setStatus('file_uploaded')
+    return
+  }
+
+  function handleColumnToggle(column) {
+    setSelectedColumnsToDrop(prev => {
+      if (prev.includes(column)) {
+        return prev.filter(col => col !== column)
+      } else {
+        return [...prev, column]
+      }
+    })
+  }
+
+  function handleDropColumns() {
+    if (selectedColumnsToDrop.length === 0) {
+      const noSelectionMessage = { 
+        id: crypto.randomUUID(), 
+        role: 'assistant', 
+        content: 'No columns selected to drop. You can now start chatting!' 
+      }
+      setMessages(prev => [...prev, noSelectionMessage])
+    } else {
+      const remainingHeaders = csvHeaders.filter(header => !selectedColumnsToDrop.includes(header))
+      setCsvHeaders(remainingHeaders)
+      
+      const dropMessage = { 
+        id: crypto.randomUUID(), 
+        role: 'assistant', 
+        content: `Dropped ${selectedColumnsToDrop.length} columns: ${selectedColumnsToDrop.join(', ')}. Remaining columns: ${remainingHeaders.join(', ')}. You can now start chatting!` 
+      }
+      setMessages(prev => [...prev, dropMessage])
+    }
+    
+    setShowColumnSelector(false)
+    setSelectedColumnsToDrop([])
+    setStatus('ready')
+  } 
 
   async function onSend(initialOverride) {
     const content = (initialOverride ?? input).trim()
@@ -109,14 +157,9 @@ function Chat() {
     const userMessage = { id: crypto.randomUUID(), role: 'user', content }
     setMessages((prev) => [...prev, userMessage])
 
-    // If status is empty, don't call LLM, just ask for file
-    if (status === '') {
-      const fileRequestMessage = { 
-        id: crypto.randomUUID(), 
-        role: 'assistant', 
-        content: 'Please upload a CSV file first using the file uploader below.' 
-      }
-      setMessages((prev) => [...prev, fileRequestMessage])
+    // If status is empty or file_uploaded, don't call LLM, just ask for file
+    if (status === '' || status === 'file_uploaded') {
+      askForFile()
       return
     }
 
@@ -183,6 +226,38 @@ function Chat() {
                 </svg>
                 Choose CSV File
               </label>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showColumnSelector && (
+        <div className="column-selector-section">
+          <div className="column-selector-container">
+            <div className="column-selector-header">
+              <h3>Select Columns to Drop</h3>
+              <p>Choose which columns you want to remove from your dataset</p>
+            </div>
+            <div className="column-checkboxes">
+              {csvHeaders.map((column, index) => (
+                <label key={index} className="column-checkbox-label">
+                  <input
+                    type="checkbox"
+                    checked={selectedColumnsToDrop.includes(column)}
+                    onChange={() => handleColumnToggle(column)}
+                    className="column-checkbox"
+                  />
+                  <span className="column-name">{column}</span>
+                </label>
+              ))}
+            </div>
+            <div className="column-selector-actions">
+              <button 
+                onClick={handleDropColumns}
+                className="drop-columns-button"
+              >
+                Drop Selected Columns ({selectedColumnsToDrop.length})
+              </button>
             </div>
           </div>
         </div>
