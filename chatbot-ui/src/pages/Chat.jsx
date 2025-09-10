@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useLocation } from 'react-router-dom'
+import ColumnSelector from '../components/ColumnSelector'
 
 function Chat() {
   const [messages, setMessages] = useState([
@@ -11,10 +12,12 @@ function Chat() {
   const [status, setStatus] = useState('')
   const [csvHeaders, setCsvHeaders] = useState([])
   const [selectedColumnsToDrop, setSelectedColumnsToDrop] = useState([])
-  const [showColumnSelector, setShowColumnSelector] = useState(false)
+  const [userConstraints, setUserConstraints] = useState({})
+  const [target, setTarget] = useState({})
   const messagesEndRef = useRef(null)
   const inputRef = useRef(null)
   const location = useLocation()
+
 
   useEffect(() => {
     if (messagesEndRef.current) {
@@ -31,12 +34,110 @@ function Chat() {
     }
   }
 
+  function getUserConstraints() {
+    const headerMessage = { 
+      id: crypto.randomUUID(), 
+      role: 'assistant', 
+      content: `Now let's set constraints for your data. Select a column and specify minimum and maximum values.`
+    }
+    setMessages(prev => [...prev, headerMessage])
+  }
+
+  function handleAddConstraint(newConstraint, column, min, max) {
+    setUserConstraints(prev => ({
+      ...prev,
+      ...newConstraint
+    }))
+
+    // Show confirmation
+    const confirmMessage1 = { 
+      id: crypto.randomUUID(), 
+      role: 'user', 
+      content: `Added constraint for ${column}: min=${min}, max=${max}.`
+     } 
+    const confirmMessage2 = { 
+        id: crypto.randomUUID(), 
+        role: 'user', 
+        content: `You can add more constraints or click "Finish" to proceed.` 
+      }
+    setMessages(prev => [...prev, confirmMessage1, confirmMessage2])
+  }
+
+  function handleFinishConstraints() {
+    const finishMessage = { 
+      id: crypto.randomUUID(), 
+      role: 'assistant', 
+      content: `Great! You've set ${Object.keys(userConstraints).length} constraints.` 
+    }
+    setMessages(prev => [...prev, finishMessage])
+    setStatus('constraints_added')
+  }
+
+  function getTarget() {
+    const headerMessage = { 
+      id: crypto.randomUUID(), 
+      role: 'assistant', 
+      content: `Now select the target variable and specify its minimum and maximum values.` 
+    }
+    setMessages(prev => [...prev, headerMessage])
+  }
+
+  function handleSetTarget(newTarget, column, min, max) {
+    setTarget(prev => ({
+      ...prev,
+      ...newTarget
+    }))
+
+    // Show confirmation
+    const confirmMessage1 = { 
+      id: crypto.randomUUID(), 
+      role: 'user', 
+      content: `Added target variable: ${column} with min=${min}, max=${max}.`
+    }
+      const confirmMessage2 = { 
+        id: crypto.randomUUID(), 
+        role: 'assistant', 
+        content: `You can add more targets or click "Finish" to proceed.`
+      }
+     
+    setMessages(prev => [...prev, confirmMessage1, confirmMessage2])
+  }
+
+  function handleFinishTargets() {
+    const finishMessage = { 
+      id: crypto.randomUUID(), 
+      role: 'assistant', 
+      content: `Perfect! You've set ${Object.keys(target).length} target variables.` 
+    }
+    setMessages(prev => [...prev, finishMessage])
+    setStatus('target_added')
+  }
+
   useEffect(() => {
     if (!inputRef.current) return
     const el = inputRef.current
     el.style.height = 'auto'
     el.style.height = Math.min(el.scrollHeight, 200) + 'px'
   }, [input])
+
+  useEffect(() => {
+    if (status === '') {
+      askForFile()
+      return
+    }
+  }, [status])
+
+  useEffect(() => {
+    if (status === 'columns_dropped') {
+      getTarget()
+    }
+  }, [status])
+
+  useEffect(() => {
+    if (status === 'target_added') {
+      getUserConstraints()
+    }
+  }, [status])
 
   function handleFileUpload(event) {
     const file = event.target.files[0]
@@ -54,19 +155,23 @@ function Chat() {
       if (lines.length > 0) {
         const headers = lines[0].split(',').map(header => header.trim().replace(/"/g, ''))
         setCsvHeaders(headers)
-        setStatus('file_uploaded')
-        setShowColumnSelector(true)
         
         // Add a message showing the headers
-        const headerMessage = { 
+        const headerMessage1 = { 
           id: crypto.randomUUID(), 
-          role: 'assistant', 
-          content: `File uploaded successfully! Found ${headers.length} columns: ${headers.join(', ')}. Please select which columns you want to drop.` 
+          role: 'user', 
+          content: `File uploaded successfully! Found ${headers.length} columns: ${headers.join(', ')}.` 
         }
-        setMessages(prev => [...prev, headerMessage])
+        const headerMessage2 = { 
+            id: crypto.randomUUID(), 
+            role: 'assistant', 
+            content: `Please select which columns you want to drop.` 
+          }
+        setMessages(prev => [...prev, headerMessage1,headerMessage2])
       }
     }
     reader.readAsText(file)
+    setStatus('file_uploaded')
   }
 
   async function callLLM(userText) {
@@ -103,6 +208,7 @@ function Chat() {
       onChunk(token)
     }
   }
+
   function askForFile(){
     const fileRequestMessage = { 
       id: crypto.randomUUID(), 
@@ -110,7 +216,6 @@ function Chat() {
       content: 'Please upload a CSV file first using the file uploader below.' 
     }
     setMessages((prev) => [...prev, fileRequestMessage])
-    setStatus('file_uploaded')
     return
   }
 
@@ -128,8 +233,8 @@ function Chat() {
     if (selectedColumnsToDrop.length === 0) {
       const noSelectionMessage = { 
         id: crypto.randomUUID(), 
-        role: 'assistant', 
-        content: 'No columns selected to drop. You can now start chatting!' 
+        role: 'user', 
+        content: 'No columns selected to drop.' 
       }
       setMessages(prev => [...prev, noSelectionMessage])
     } else {
@@ -138,15 +243,15 @@ function Chat() {
       
       const dropMessage = { 
         id: crypto.randomUUID(), 
-        role: 'assistant', 
-        content: `Dropped ${selectedColumnsToDrop.length} columns: ${selectedColumnsToDrop.join(', ')}. Remaining columns: ${remainingHeaders.join(', ')}. You can now start chatting!` 
+        role: 'user', 
+        content: `Dropped ${selectedColumnsToDrop.length} columns: ${selectedColumnsToDrop.join(', ')}. Remaining columns: ${remainingHeaders.join(', ')}.` 
       }
       setMessages(prev => [...prev, dropMessage])
     }
     
-    setShowColumnSelector(false)
     setSelectedColumnsToDrop([])
-    setStatus('ready')
+    setStatus('columns_dropped')
+    // After dropping columns, ask for constraints
   } 
 
   async function onSend(initialOverride) {
@@ -157,13 +262,7 @@ function Chat() {
     const userMessage = { id: crypto.randomUUID(), role: 'user', content }
     setMessages((prev) => [...prev, userMessage])
 
-    // If status is empty or file_uploaded, don't call LLM, just ask for file
-    if (status == '')
-    {
-      askForFile()
-      return
-    }
-
+    // If status is empty, don't call LLM, just ask for file
     setIsGenerating(true)
     setPartial('')
 
@@ -179,6 +278,7 @@ function Chat() {
   }
 
   const initialHandledRef = useRef(false)
+  
   useEffect(() => {
     const initialPrompt = location.state && location.state.initialPrompt
     if (initialPrompt && !initialHandledRef.current) {
@@ -232,7 +332,7 @@ function Chat() {
         </div>
       )}
 
-      {setStatus==='file_uploaded' && (
+      {status==='file_uploaded' && (
         <div className="column-selector-section">
           <div className="column-selector-container">
             <div className="column-selector-header">
@@ -264,6 +364,36 @@ function Chat() {
         </div>
       )}
 
+      {status === 'target_added' && (
+        <ColumnSelector
+          title="Set Constraints"
+          description="Select columns and specify minimum and maximum values"
+          columns={csvHeaders}
+          onAdd={handleAddConstraint}
+          onFinish={handleFinishConstraints}
+          existingItems={userConstraints}
+          buttonText="Add Constraint"
+          finishButtonText="Finish"
+          showFinishButton={true}
+          allowMultiple={true}
+        />
+      )}
+
+      {status === 'columns_dropped' && (
+        <ColumnSelector
+          title="Set Target Variables"
+          description="Select target columns and specify their minimum and maximum values"
+          columns={csvHeaders}
+          onAdd={handleSetTarget}
+          onFinish={handleFinishTargets}
+          existingItems={target}
+          buttonText="Add Target Variable"
+          finishButtonText="Finish"
+          showFinishButton={true}
+          allowMultiple={true}
+        />
+      )}
+
       <footer className="chat-input-bar">
         <div className="chat-input-container">
           <textarea
@@ -289,6 +419,7 @@ function Chat() {
     </>
   )
 }
+
 
 function MessageBubble({ role, content, isStreaming }) {
   const isUser = role === 'user'
