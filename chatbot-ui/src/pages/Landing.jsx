@@ -47,7 +47,7 @@ function Landing() {
           </div>
         </div>
 
-        <section style={{ maxWidth: 900, margin: '28px auto 0 auto' }}>
+        {/* <section style={{ maxWidth: 900, margin: '28px auto 0 auto' }}>
           <div style={{ color: '#9ca3af', fontSize: 12, marginBottom: 8 }}>Try one of these:</div>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 12 }}>
             {SUGGESTIONS.map((s) => (
@@ -58,17 +58,17 @@ function Landing() {
               >{s}</button>
             ))}
           </div>
-        </section>
+        </section> */}
       </div>
     </main>
   )
 }
 
-const SUGGESTIONS = [
-  'Explain recursion in simple terms',
-  'Summarize the benefits of React hooks',
-  'Write a haiku about the ocean',
-  'Add 12, 45, and 7',
-]
+// const SUGGESTIONS = [
+//   'Explain recursion in simple terms',
+//   'Summarize the benefits of React hooks',
+//   'Write a haiku about the ocean',
+//   'Add 12, 45, and 7',
+// ]
 
 export default Landing
