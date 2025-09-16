@@ -184,7 +184,7 @@ const DataFileInput = memo(({ localPath = '', setLocalPath = () => {}, setStatus
             disabled={isLoading}
           />
           <div className="local-path-input" style={{ marginTop: '8px' }}>
-            <label htmlFor="local-path">Local file path (optional):</label>
+            <label htmlFor="local-path">Local file path:</label>
             <input
               type="text"
               id="local-path"
