@@ -1,6 +1,6 @@
-import { useState } from 'react'
+import { useCallback, useMemo, useState, memo } from 'react'
 
-function ColumnSelector({ 
+const ColumnSelector = memo(({ 
   title, 
   description, 
   columns, 
@@ -11,12 +11,26 @@ function ColumnSelector({
   finishButtonText = "Finish",
   showFinishButton = true,
   allowMultiple = true
-}) {
+}) => {
   const [selectedColumn, setSelectedColumn] = useState('')
   const [minValue, setMinValue] = useState('')
   const [maxValue, setMaxValue] = useState('')
 
-  function handleAdd() {
+  // Memoize computed values
+  const existingItemsCount = useMemo(() => Object.keys(existingItems).length, [existingItems])
+  const existingItemsEntries = useMemo(() => Object.entries(existingItems), [existingItems])
+  const isFormValid = useMemo(() => 
+    selectedColumn && minValue && maxValue && 
+    !isNaN(parseFloat(minValue)) && !isNaN(parseFloat(maxValue)) &&
+    parseFloat(minValue) < parseFloat(maxValue)
+  , [selectedColumn, minValue, maxValue])
+
+  // Memoize event handlers
+  const handleColumnChange = useCallback((e) => setSelectedColumn(e.target.value), [])
+  const handleMinChange = useCallback((e) => setMinValue(e.target.value), [])
+  const handleMaxChange = useCallback((e) => setMaxValue(e.target.value), [])
+
+  const handleAdd = useCallback(() => {
     if (!selectedColumn || !minValue || !maxValue) {
       alert('Please fill in all fields')
       return
@@ -50,7 +64,7 @@ function ColumnSelector({
       setMinValue('')
       setMaxValue('')
     }
-  }
+  }, [selectedColumn, minValue, maxValue, onAdd, allowMultiple])
 
   return (
     <div className="column-selector-section">
@@ -65,7 +79,7 @@ function ColumnSelector({
             <label className="column-selector-label">Column:</label>
             <select 
               value={selectedColumn}
-              onChange={(e) => setSelectedColumn(e.target.value)}
+              onChange={handleColumnChange}
               className="column-selector-select"
             >
               <option value="">Select a column</option>
@@ -80,7 +94,7 @@ function ColumnSelector({
             <input
               type="number"
               value={minValue}
-              onChange={(e) => setMinValue(e.target.value)}
+              onChange={handleMinChange}
               placeholder="Min value"
               className="column-selector-input"
             />
@@ -91,7 +105,7 @@ function ColumnSelector({
             <input
               type="number"
               value={maxValue}
-              onChange={(e) => setMaxValue(e.target.value)}
+              onChange={handleMaxChange}
               placeholder="Max value"
               className="column-selector-input"
             />
@@ -110,15 +124,15 @@ function ColumnSelector({
               onClick={onFinish}
               className="column-selector-finish-button"
             >
-              {finishButtonText} ({Object.keys(existingItems).length} items)
+              {finishButtonText} ({existingItemsCount} items)
             </button>
           )}
         </div>
 
-        {Object.keys(existingItems).length > 0 && (
+        {existingItemsCount > 0 && (
           <div className="column-selector-list">
             <h4>Current Items:</h4>
-            {Object.entries(existingItems).map(([column, values]) => (
+            {existingItemsEntries.map(([column, values]) => (
               <div key={column} className="column-selector-item">
                 <strong>{column}</strong>: min={values.min}, max={values.max}
               </div>
@@ -128,6 +142,6 @@ function ColumnSelector({
       </div>
     </div>
   )
-}
+})
 
 export default ColumnSelector
