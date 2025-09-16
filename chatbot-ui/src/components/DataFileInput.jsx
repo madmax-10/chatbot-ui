@@ -1,7 +1,7 @@
 import { useCallback, useMemo, useState, memo } from 'react'
 import Papa from 'papaparse'
 
-const DataFileInput = memo(({setStatus, setCsvHeaders, setDatasetData}) => {
+const DataFileInput = memo(({ localPath = '', setLocalPath = () => {}, setStatus, setCsvHeaders, setDatasetData}) => {
   const [inputType, setInputType] = useState('local') // 'local' or 'url'
   const [selectedFile, setSelectedFile] = useState(null)
   const [urlPath, setUrlPath] = useState('')
@@ -9,6 +9,7 @@ const DataFileInput = memo(({setStatus, setCsvHeaders, setDatasetData}) => {
 
   // Memoize computed values
   const isUrlValid = useMemo(() => urlPath.trim().length > 0, [urlPath])
+  const isLocalPathValid = useMemo(() => localPath.trim().length > 0, [localPath])
   const isLocalMode = useMemo(() => inputType === 'local', [inputType])
   const isUrlMode = useMemo(() => inputType === 'url', [inputType])
 
@@ -19,8 +20,9 @@ const DataFileInput = memo(({setStatus, setCsvHeaders, setDatasetData}) => {
       setUrlPath('')
     } else {
       setSelectedFile(null)
+      setLocalPath('')
     }
-  }, [])
+  }, [setLocalPath])
 
   const handleFileChange = useCallback((event) => {
     const file = event.target.files[0]
@@ -49,7 +51,8 @@ const DataFileInput = memo(({setStatus, setCsvHeaders, setDatasetData}) => {
         if (setDatasetData) {
           setDatasetData({ fileName, headers, sampleData })
         } 
-        if (setStatus) {
+        // Advance status only when both a file is uploaded and a local path is provided
+        if (setStatus && localPath.trim()) {
           setStatus('3')
         }
           
@@ -142,6 +145,15 @@ const DataFileInput = memo(({setStatus, setCsvHeaders, setDatasetData}) => {
     handleUrlSubmit();
   }, [handleUrlSubmit])
 
+  const handleLocalPathSubmitClick = useCallback((e) => {
+    e.stopPropagation();
+    if (!localPath.trim()) return
+    // If a file has already been selected and parsed (isLoading false), mark ready
+    if (selectedFile && !isLoading && setStatus) {
+      setStatus('3')
+    }
+  }, [localPath, selectedFile, isLoading, setStatus])
+
   return (
     <div className="data-file-input" onClick={handleClick}>
       <div className="input-type-selector">
@@ -171,6 +183,27 @@ const DataFileInput = memo(({setStatus, setCsvHeaders, setDatasetData}) => {
             className="file-input"
             disabled={isLoading}
           />
+          <div className="local-path-input" style={{ marginTop: '8px' }}>
+            <label htmlFor="local-path">Local file path (optional):</label>
+            <input
+              type="text"
+              id="local-path"
+              value={localPath}
+              onChange={(e) => setLocalPath(e.target.value)}
+              onClick={handleClick}
+              placeholder="e.g., /Users/you/data.csv"
+              className="path-input"
+              disabled={isLoading}
+            />
+            <button
+              onClick={handleLocalPathSubmitClick}
+              disabled={!isLocalPathValid || isLoading}
+              className="submit-btn"
+              style={{ marginTop: '6px' }}
+            >
+              Use Path
+            </button>
+          </div>
           {selectedFile && (
             <div className="selected-file">
               <span>Selected: {selectedFile.name}</span>

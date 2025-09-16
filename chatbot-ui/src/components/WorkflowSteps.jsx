@@ -2,7 +2,7 @@ import { useCallback, useMemo, useState, memo } from 'react'
 import DataFileInput from './DataFileInput'
 import DatasetPreview from './DatasetPreview'
 
-const WorkflowSteps = memo(({ setCsvHeaders, status, setStatus}) => {
+const WorkflowSteps = memo(({ localPath = '', setLocalPath, setCsvHeaders, status, setStatus}) => {
   const [expandedRequirement, setExpandedRequirement] = useState(null)
   const [datasetData, setDatasetData] = useState(null)
 
@@ -113,7 +113,7 @@ const WorkflowSteps = memo(({ setCsvHeaders, status, setStatus}) => {
                   <p>{requirement.description}</p>
                   {isDataFileRequirement && isExpanded && (
                     <div className="step-uploader">
-                      <DataFileInput setStatus={setStatus} setCsvHeaders={setCsvHeaders} setDatasetData={setDatasetData} />
+                      <DataFileInput localPath={localPath} setLocalPath={setLocalPath} setStatus={setStatus} setCsvHeaders={setCsvHeaders} setDatasetData={setDatasetData} />
                     </div>
                   )}
                 </div>

@@ -38,13 +38,13 @@ const levenshteinDistance = (s1, s2) => {
 const parseTextAndMatchFeatures = (text, yourFeatureList) => {
   if (!text || typeof text !== 'string') {
     console.log("No text")
-    return { target: {} };
+    return {};
   }
 
   // Check if yourFeatureList is valid
   if (!yourFeatureList || !Array.isArray(yourFeatureList) || yourFeatureList.length === 0) {
     console.log("No valid feature list provided")
-    return { target: {} };
+    return {};
   }
 
   const constraints = {};
@@ -209,19 +209,23 @@ function getInitialMessage(selectedOption) {
   }
 }
 
-function ChatBox({csvHeaders, status, setStatus, setCsvHeaders}) {
+function ChatBox({localPath, csvHeaders, status, setStatus, setCsvHeaders}) {
 
   const [selectedOption, setSelectedOption] = useState(null)
   const [messages, setMessages] = useState([
     { id: 'm-0', role: 'assistant', content: getInitialMessage(null) }
   ])
+  const [taskType, setTaskType] = useState('Regression')
   const [input, setInput] = useState('')
   const [isGenerating, setIsGenerating] = useState(false)
   const [partial, setPartial] = useState('')
   const [selectedColumnsToDrop, setSelectedColumnsToDrop] = useState([])
+  const [droppedColumns, setDroppedColumns] = useState([])
   const [userConstraints, setUserConstraints] = useState({})
   const [target, setTarget] = useState({})
   const [showDropColumnSelector, setShowDropColumnSelector] = useState(false)
+  const [queryType, setQueryType] = useState('recommend')
+  const [finalJson, setFinalJson] = useState({})
   const messagesEndRef = useRef(null)
   const inputRef = useRef(null)
 
@@ -240,6 +244,7 @@ function ChatBox({csvHeaders, status, setStatus, setCsvHeaders}) {
   }, [selectedOption])
 
   const canSend = useMemo(() => input.trim().length > 0 && !isGenerating, [input, isGenerating])
+  const isChatDisabled = useMemo(() => status === '2' || status === '5', [status])
 
   // Memoize quick option handlers based on status
   const handleQuickOption1 = useCallback(() => {
@@ -248,7 +253,9 @@ function ChatBox({csvHeaders, status, setStatus, setCsvHeaders}) {
       setInput(`Maximize ${lastTwoHeaders[0]}`)
     } else if (status === '4') {
       const thirdFourthHeaders = csvHeaders.slice(2, 4)
-      setInput(`Recommend ${thirdFourthHeaders[0]} between (    ) to (    )`)
+      setInput(`Recommend on ${thirdFourthHeaders[0]} between (    ) to (    )`)
+    } else if (status === '6') {
+      setInput("Regression")
     } else {
       setInput("Can you help me analyze this data?")
     }
@@ -261,6 +268,8 @@ function ChatBox({csvHeaders, status, setStatus, setCsvHeaders}) {
     } else if (status === '4') {
       const thirdFourthHeaders = csvHeaders.slice(2, 4)
       setInput(`Recommend on ${thirdFourthHeaders[1]} between (    ) to (    )`)
+    } else if (status === '6') {
+      setInput("Classification")
     } else {
       setInput("What insights can you provide?")
     }
@@ -273,7 +282,10 @@ function ChatBox({csvHeaders, status, setStatus, setCsvHeaders}) {
     } else if (status === '4') {
       const thirdFourthHeaders = csvHeaders.slice(2, 4)
       setInput(`Recommend on ${thirdFourthHeaders[0]} between (    ) to (     and ${thirdFourthHeaders[1]} between (    ) to (    ) )`)
-    } else {
+    } else if (status === '6') {
+      setInput("")
+    }
+    else {
       setInput("Can you suggest improvements?")
     }
   }, [status, csvHeaders])
@@ -281,6 +293,10 @@ function ChatBox({csvHeaders, status, setStatus, setCsvHeaders}) {
   // Memoize option selector handler
   const handleOptionSelected = useCallback((optionId) => {
     setSelectedOption(optionId)
+    // map option to queryType for final JSON
+    if (optionId === 'recommend') setQueryType('recommend')
+    else if (optionId === 'modify') setQueryType('modify')
+    else if (optionId === 'whatif') setQueryType('whatif')
     setStatus('2') // Change status to show chat interface
   }, [setStatus])
 
@@ -292,14 +308,21 @@ function ChatBox({csvHeaders, status, setStatus, setCsvHeaders}) {
   // Define analyzePrompt before onSend to avoid circular dependency
   const analyzePrompt = useCallback((prompt) => {
      const result = parseTextAndMatchFeatures(prompt, csvHeaders)
+     console.log("Status", status)
+     if (status === '3')
+    {
+        console.log("Setting target" )
+        setTarget(prev => ({ ...prev, ...result }))
+    }
+     else if (status === '4'){
+      console.log("Setting user constraints" )
 
-     if (status === '3') setTarget(result)
-     else if (status === '4') setUserConstraints(result)
-    //  console.log("Result", result)
+     setUserConstraints(prev => ({ ...prev, ...result }))
+     }
      
      if (Object.keys(result).length === 0) {
-       if (status === '3') setStatus('show_user_constraints')
-       else if (status === '4') setStatus('show_target_variables')
+       if (status === '4') setStatus('show_user_constraints')
+       else if (status === '3') setStatus('show_target_variables')
        return `I couldn't find any specific constraints in your message. Could you please specify which columns you'd like to set constraints for? For example: '${csvHeaders[0]} between 10 and 100' or '${csvHeaders[1]} greater than 18`
      }
      
@@ -336,7 +359,7 @@ function ChatBox({csvHeaders, status, setStatus, setCsvHeaders}) {
       // response += "\nWould you like me to apply these constraints to your data analysis?"
       
       return response
-   }, [csvHeaders, setStatus])
+   }, [csvHeaders, setStatus, status])
 
   // Define streamText before onSend to avoid circular dependency
   const streamText = useCallback(async (text, onChunk, chunkMs = 15) => {
@@ -361,6 +384,26 @@ function ChatBox({csvHeaders, status, setStatus, setCsvHeaders}) {
       }
       return
     }
+
+    if (status === '6') {
+      if (content.toLowerCase().includes('regression')) {
+        setTaskType('Regression')
+        setStatus('7')
+      } else if (content.toLowerCase().includes('classification')) {
+        setTaskType('Classification')
+        setStatus('7')
+      }
+      else {
+        const errorMessage = { 
+          id: crypto.randomUUID(), 
+          role: 'assistant', 
+          content: `I'm sorry, I didn't understand your response. Please try again.` 
+        }
+        setMessages(prev => [...prev, errorMessage])
+      }
+      return
+    }
+
     setIsGenerating(true)
     setPartial('')
 
@@ -378,11 +421,12 @@ function ChatBox({csvHeaders, status, setStatus, setCsvHeaders}) {
   }, [input, analyzePrompt, streamText])
 
   const handleKeyDown = useCallback((e) => {
+    if (isChatDisabled) return
     if (e.key === 'Enter' && !e.shiftKey && !e.altKey && !e.metaKey && !e.ctrlKey) {
       e.preventDefault()
       if (canSend) onSend()
     }
-  }, [canSend, onSend])
+  }, [canSend, onSend, isChatDisabled])
 
   const getUserConstraints = useCallback(() => {
     const headerMessage = { 
@@ -391,6 +435,19 @@ function ChatBox({csvHeaders, status, setStatus, setCsvHeaders}) {
       content: `Is there any particular feature you want me to recommend? If you have multiple of them, you can separate them using commas. Please add constraints if you have any. `
     }
     setMessages(prev => [...prev, headerMessage])
+  }, [])
+
+  const getTaskType = useCallback(() => {
+    const headerMessage = { 
+      id: crypto.randomUUID(), 
+      role: 'assistant', 
+      content: `Is the task going to be a regression or classification?` 
+    }
+    setMessages(prev => [...prev, headerMessage])
+  }, [])
+
+  const handleTaskTypeChange = useCallback((newTaskType) => {
+    setTaskType(newTaskType)
   }, [])
 
   const handleAddConstraint = useCallback((newConstraint, column, min, max) => {
@@ -469,8 +526,8 @@ function ChatBox({csvHeaders, status, setStatus, setCsvHeaders}) {
   }, [input])
 
   useEffect(() => {
-    if (status === '') {
-      return
+    if (status === '6') {
+      getTaskType()
     }
   }, [status])
 
@@ -485,6 +542,33 @@ function ChatBox({csvHeaders, status, setStatus, setCsvHeaders}) {
       getUserConstraints()
     }
   }, [status, getUserConstraints])
+
+
+  useEffect(() => {
+    if (status === '7') {
+      const query_structure = {
+        "key": "PM-100_q1",
+        "file_name": localPath,
+        "is_subset_sampling_enabled": true,
+        "task_type": taskType,
+        "dropped_columns": droppedColumns,
+        "query_type": queryType,
+        "target": target,
+        "user_constraints": userConstraints,
+        // "fixed_columns": fixed_columns,
+        // "query_features": query_features,
+        // "samples": samples
+      }
+      setFinalJson(query_structure)
+      setStatus('8')
+    }
+  }, [status, localPath, taskType, droppedColumns, queryType, target, userConstraints, setStatus])
+
+  useEffect(() => {
+    if (status === '8') {
+      console.log("Final Json", finalJson)
+    }
+  }, [status, finalJson])
 
   const callLLM = useCallback(async (userText) => {
     try {
@@ -534,7 +618,7 @@ function ChatBox({csvHeaders, status, setStatus, setCsvHeaders}) {
     } else {
       const remainingHeaders = csvHeaders.filter(header => !selectedColumnsToDrop.includes(header))
       setCsvHeaders(remainingHeaders)
-      
+      setDroppedColumns(selectedColumnsToDrop)
       const dropMessage = { 
         id: crypto.randomUUID(), 
         role: 'user', 
@@ -545,6 +629,7 @@ function ChatBox({csvHeaders, status, setStatus, setCsvHeaders}) {
     
     setSelectedColumnsToDrop([])
     setShowDropColumnSelector(false)
+    setStatus('6')
     // setStatus('columns_dropped')
   }, [selectedColumnsCount, selectedColumnsToDrop, csvHeaders, setCsvHeaders, setStatus])
 
@@ -557,10 +642,6 @@ function ChatBox({csvHeaders, status, setStatus, setCsvHeaders}) {
     setShowDropColumnSelector(true)
   }, [])
   
-
-
-  
-
   if (status === '1') {
     return <OptionsSelector onOptionSelected={handleOptionSelected} />
   }
@@ -622,39 +703,60 @@ function ChatBox({csvHeaders, status, setStatus, setCsvHeaders}) {
 
         <div className="chat-input-bar">
           {/* Quick options above the textbox */}
-          <div className="quick-options">
-            <button 
-              className="quick-option-btn"
-              onClick={handleQuickOption1}
-            >
-              {status === '3' && csvHeaders.length >= 2 ? `Maximize ${csvHeaders.slice(-2)[0]}` :
-               status === '4' && csvHeaders.length >= 4 ? `Recommend ${csvHeaders.slice(2, 4)[0]}` :
-               'Analyze Data'}
-            </button>
-            <button 
-              className="quick-option-btn"
-              onClick={handleQuickOption2}
-            >
-              {status === '3' && csvHeaders.length >= 2 ? `Minimize ${csvHeaders.slice(-2)[1]}` :
-               status === '4' && csvHeaders.length >= 4 ? `Recommend ${csvHeaders.slice(2, 4)[1]}` :
-               'Get Insights'}
-            </button>
-            <button 
-              className="quick-option-btn"
-              onClick={handleQuickOption3}
-            >
-              {status === '3' && csvHeaders.length >= 2 ? `Maximize ${csvHeaders.slice(-2)[1]}` :
-               status === '4' && csvHeaders.length >= 4 ? `Recommend Both` :
-               'Suggest Improvements'}
-            </button>
-            {/* <button 
-              className="quick-option-btn drop-columns-btn"
-              onClick={handleShowDropColumnSelector}
-              disabled={showDropColumnSelector}
-            >
-              Drop Columns
-            </button> */}
-          </div>
+          {!isChatDisabled && (
+            <div className="quick-options">
+              {status === '6' ? (
+                <>
+                  <button 
+                    className="quick-option-btn"
+                    onClick={handleQuickOption1}
+                  >
+                    Regression
+                  </button>
+                  <button 
+                    className="quick-option-btn"
+                    onClick={handleQuickOption2}
+                  >
+                    Classification
+                  </button>
+                </>
+              ) : (
+                <>
+                  <button 
+                    className="quick-option-btn"
+                    onClick={handleQuickOption1}
+                  >
+                    {status === '3' && csvHeaders.length >= 2 ? `Maximize ${csvHeaders.slice(-2)[0]}` :
+                     status === '4' && csvHeaders.length >= 4 ? `Recommend ${csvHeaders.slice(2, 4)[0]}` :
+                     'Analyze Data'}
+                  </button>
+                  <button 
+                    className="quick-option-btn"
+                    onClick={handleQuickOption2}
+                  >
+                    {status === '3' && csvHeaders.length >= 2 ? `Minimize ${csvHeaders.slice(-2)[1]}` :
+                     status === '4' && csvHeaders.length >= 4 ? `Recommend ${csvHeaders.slice(2, 4)[1]}` :
+                     'Get Insights'}
+                  </button>
+                  <button 
+                    className="quick-option-btn"
+                    onClick={handleQuickOption3}
+                  >
+                    {status === '3' && csvHeaders.length >= 2 ? `Maximize ${csvHeaders.slice(-2)[1]}` :
+                     status === '4' && csvHeaders.length >= 4 ? `Recommend Both` :
+                     'Suggest Improvements'}
+                  </button>
+                </>
+              )}
+              {/* <button 
+                className="quick-option-btn drop-columns-btn"
+                onClick={handleShowDropColumnSelector}
+                disabled={showDropColumnSelector}
+              >
+                Drop Columns
+              </button> */}
+            </div>
+          )}
           
           <div className="chat-input-container">
             <textarea
@@ -665,11 +767,12 @@ function ChatBox({csvHeaders, status, setStatus, setCsvHeaders}) {
               onKeyDown={handleKeyDown}
               ref={inputRef}
               rows={1}
+              disabled={isChatDisabled}
             />
             <button
               className="send-button"
               onClick={() => onSend()}
-              disabled={!canSend}
+              disabled={!canSend || isChatDisabled}
               aria-label="Send"
             >
               <SendIcon disabled={!canSend} />

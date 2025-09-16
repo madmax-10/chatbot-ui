@@ -7,6 +7,7 @@ function App() {
   const [csvHeaders, setCsvHeaders] = useState([])
   const [completedRequirements, setCompletedRequirements] = useState([])
   const [status, setStatus] = useState('1')
+  const [localPath, setLocalPath] = useState('')
 
   // Automatically update completed requirements based on app state
   useEffect(() => {
@@ -36,6 +37,8 @@ function App() {
       <div className="main-layout">
         <div className="left-panel">
           <WorkflowSteps
+            localPath={localPath}
+            setLocalPath={setLocalPath}
             setCsvHeaders={setCsvHeaders} 
             status={status}
             completedRequirements={completedRequirements}
@@ -43,7 +46,7 @@ function App() {
           />
         </div>
         <div className="right-panel">
-          <ChatBox csvHeaders={csvHeaders} status={status} setStatus={setStatus} setCsvHeaders={setCsvHeaders}/>
+          <ChatBox localPath={localPath} csvHeaders={csvHeaders} status={status} setStatus={setStatus} setCsvHeaders={setCsvHeaders}/>
         </div>
       </div>
     </div>
