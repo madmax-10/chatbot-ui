@@ -1,7 +1,7 @@
 import { useCallback, useMemo, useState, memo } from 'react'
 import Papa from 'papaparse'
 
-const DataFileInput = memo(({ localPath = '', setLocalPath = () => {}, setStatus, setCsvHeaders, setDatasetData}) => {
+const DataFileInput = memo(({ localPath = '', setLocalPath = () => {}, setStatus,setCsvHeaders, setDatasetData, isSubsetSamplingEnabled = false, setIsSubsetSamplingEnabled = () => {} }) => {
   const [inputType, setInputType] = useState('local') // 'local' or 'url'
   const [selectedFile, setSelectedFile] = useState(null)
   const [urlPath, setUrlPath] = useState('')
@@ -156,6 +156,26 @@ const DataFileInput = memo(({ localPath = '', setLocalPath = () => {}, setStatus
 
   return (
     <div className="data-file-input" onClick={handleClick}>
+      <div className="toggle-large-dataset" style={{ marginBottom: '10px' }}>
+        <label style={{ display: 'block', marginBottom: '6px' }}>Is your dataset very large?</label>
+        <div className="yes-no-toggle" role="group" aria-label="Large dataset toggle">
+          <button
+            className={`input-type-btn big-yes-btn ${isSubsetSamplingEnabled ? 'active' : ''}`}
+            onClick={(e) => { e.stopPropagation(); setIsSubsetSamplingEnabled(true) }}
+            type="button"
+          >
+            Yes
+          </button>
+          <button
+            className={`input-type-btn big-no-btn ${!isSubsetSamplingEnabled ? 'active' : ''}`}
+            onClick={(e) => { e.stopPropagation(); setIsSubsetSamplingEnabled(false) }}
+            type="button"
+            style={{ marginLeft: '6px' }}
+          >
+            No
+          </button>
+        </div>
+      </div>
       <div className="input-type-selector">
         <button
           className={`input-type-btn ${isLocalMode ? 'active' : ''}`}

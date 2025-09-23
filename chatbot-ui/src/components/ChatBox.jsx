@@ -3,11 +3,6 @@ import ColumnSelector from './ColumnSelector'
 import OptionsSelector from './OptionsSelector'
 import DropColumnSelector from './DropColumnSelector'
 
-// Move regex patterns outside component to avoid recreation - updated to handle multi-word features, "to" connector, maximize/minimize, and natural language expressions
-const CONSTRAINT_PATTERN = /(?:(?<feature>[a-zA-Z_][a-zA-Z0-9_\s]*?)\s*(?:is)?\s*(?:between\s+(?<min1>\d+\.?\d*)\s+(?:and|to)\s+(?<max1>\d+\.?\d*)|(?:less than or equal to|less than|max of|under|<=)\s+(?<max2>\d+\.?\d*)|(?:greater than or equal to|greater than|min of|at least|>=)\s+(?<min2>\d+\.?\d*)|(?:maximize|minimize))|(?:(?:maximize|minimize)\s+(?<feature2>.+?)(?=\s*$)))/gi
-
-// Additional pattern for natural language expressions like "I want to set X to Y"
-const NATURAL_LANGUAGE_PATTERN = /(?:i want to set|i want to change|i want|set|change)\s+(?<feature>[a-zA-Z_][a-zA-Z0-9_\s]*?)\s*(?:to|to be)\s*(?:between\s+(?<min>\d+\.?\d*)\s+(?:and|to)\s+(?<max>\d+\.?\d*)|(?:less than or equal to|less than|max of|under|<=)\s+(?<maxOnly>\d+\.?\d*)|(?:greater than or equal to|greater than|min of|at least|>=)\s+(?<minOnly>\d+\.?\d*)|(?:maximize|minimize)|(?<singleValue>\d+\.?\d*))/gi
 // Move levenshteinDistance outside component to avoid recreation
 const levenshteinDistance = (s1, s2) => {
   s1 = s1.toLowerCase();
@@ -34,168 +29,6 @@ const levenshteinDistance = (s1, s2) => {
   return costs[s2.length];
 }
 
-// Move parseTextAndMatchFeatures outside component to avoid recreation
-const parseTextAndMatchFeatures = (text, yourFeatureList) => {
-  if (!text || typeof text !== 'string') {
-    console.log("No text")
-    return {};
-  }
-
-  // Check if yourFeatureList is valid
-  if (!yourFeatureList || !Array.isArray(yourFeatureList) || yourFeatureList.length === 0) {
-    console.log("No valid feature list provided")
-    return {};
-  }
-
-  const constraints = {};
-  let processedText = text.toLowerCase();
-  
-  // Process both patterns
-  const processMatch = (match, groups, patternType) => {
-    const rawFeature = (groups.feature || groups.feature2 || '').trim();
-    
-    console.log("Regex match:", match, "Raw feature:", rawFeature, "Groups:", groups, "Pattern:", patternType);
-    console.log("Full text being processed:", processedText);
-
-    // Clean preambles/stopwords and trailing generic terms from the captured feature phrase
-    let cleanedFeature = rawFeature.toLowerCase().replace(/\s+/g, ' ').trim();
-    const STOPWORD_PREFIXES = [
-      'i want',
-      'i want to change',
-      'i would like',
-      'i wish',
-      'please',
-      'kindly',
-      'set',
-      'change',
-      'make',
-      'recommend on',
-      'recommend',
-      'the',
-      'a',
-      'an',
-      'my'
-    ];
-    for (const prefix of STOPWORD_PREFIXES) {
-      if (cleanedFeature.startsWith(prefix + ' ')) {
-        cleanedFeature = cleanedFeature.slice(prefix.length).trim();
-        break;
-      }
-    }
-    // Remove trailing generic nouns like "column", "field", or "value"
-    cleanedFeature = cleanedFeature.replace(/\b(column|field|value)s?\s*$/i, '').trim();
-
-    // --- BEST MATCH LOGIC ---
-    let bestMatch = null;
-    let minDistance = Infinity;
-
-    // Normalize the raw feature by removing spaces and converting to lowercase
-    const normalizedRawFeature = cleanedFeature.replace(/\s+/g, '');
-
-    for (const canonicalFeature of yourFeatureList) {
-      // Try multiple normalization strategies for better matching
-      const strategies = [
-        // Strategy 1: Remove underscores and spaces
-        canonicalFeature.toLowerCase().replace(/[_]/g, ''),
-        // Strategy 2: Replace underscores with spaces, then remove spaces
-        canonicalFeature.toLowerCase().replace(/_/g, ' ').replace(/\s+/g, ''),
-        // Strategy 3: Keep underscores but remove spaces
-        canonicalFeature.toLowerCase().replace(/\s+/g, ''),
-        // Strategy 4: Original with underscores as spaces
-        canonicalFeature.toLowerCase().replace(/_/g, ' ')
-      ];
-
-      for (const normalizedCanonical of strategies) {
-        const distance = levenshteinDistance(normalizedRawFeature, normalizedCanonical);
-        console.log("Comparing", normalizedRawFeature, normalizedCanonical, "distance:", distance);
-
-        if (distance < minDistance) {
-          minDistance = distance;
-          bestMatch = canonicalFeature;
-        }
-      }
-    }
-    
-    // Set a threshold: if the best match is still too different, ignore it.
-    // Use a more flexible threshold for multi-word features
-    if (bestMatch && bestMatch.length > 0) {
-      // For multi-word features, use a more lenient threshold
-      const featureLength = Math.max(normalizedRawFeature.length, bestMatch.length);
-      const threshold = Math.max(2, Math.floor(featureLength * 0.4)); // More lenient: 40% instead of 60%
-      
-      console.log("Threshold check:", minDistance, "<=?", threshold, "for", rawFeature, "->", bestMatch);
-      if (minDistance <= threshold) {
-        const key = bestMatch;
-        if (!constraints[key]) {
-          constraints[key] = { min: null, max: null };
-        }
-        
-        // Check if this is a maximize/minimize operation
-        const isMaximize = match.toLowerCase().includes('maximize');
-        const isMinimize = match.toLowerCase().includes('minimize');
-        
-        if (isMaximize || isMinimize) {
-          // For maximize/minimize, set both min and max to 0 as default
-          constraints[key].min = 0;
-          constraints[key].max = 0;
-        } else {
-          // Handle different pattern types
-          if (patternType === 'natural') {
-            // For natural language pattern
-            const min = groups.min || groups.minOnly;
-            const max = groups.max || groups.maxOnly;
-            const value = groups.singleValue;
-            
-            if (value) {
-              // For single value expressions, set both min and max to the same value
-              constraints[key].min = parseFloat(value);
-              constraints[key].max = parseFloat(value);
-            } else {
-              if (min) constraints[key].min = parseFloat(min);
-              if (max) constraints[key].max = parseFloat(max);
-            }
-          } else {
-            // For original pattern
-            const min = groups.min1 || groups.min2;
-            const max = groups.max1 || groups.max2;
-            if (min) constraints[key].min = parseFloat(min);
-            if (max) constraints[key].max = parseFloat(max);
-          }
-        }
-      }
-    }
-  };
-
-  // Process original constraint pattern
-  processedText.replace(CONSTRAINT_PATTERN, (match, ...args) => {
-    const groups = args[args.length - 1];
-    processMatch(match, groups, 'original');
-  });
-
-  // Process natural language pattern
-  processedText.replace(NATURAL_LANGUAGE_PATTERN, (match, ...args) => {
-    const groups = args[args.length - 1];
-    processMatch(match, groups, 'natural');
-  });
-
-  // Post-Processing: Apply defaults
-  for (const key in constraints) {
-    if (constraints[key].max !== null && constraints[key].min === null) {
-      constraints[key].min = 1;
-    }
-    // Set default values to 0 for any features without specific constraints
-    if (constraints[key].min === null && constraints[key].max === null) {
-      constraints[key].min = 0;
-      constraints[key].max = 0;
-    }
-  }
-
-  console.log("Constraints", constraints)
-
-  return constraints
-
-}
-
 function getInitialMessage(selectedOption) {
   switch (selectedOption) {
     case 'recommend':
@@ -209,7 +42,7 @@ function getInitialMessage(selectedOption) {
   }
 }
 
-function ChatBox({localPath, csvHeaders, status, setStatus, setCsvHeaders}) {
+function ChatBox({localPath, csvHeaders, status, setStatus, setCsvHeaders, datasetData, setDatasetData, isSubsetSamplingEnabled = false}) {
 
   const [selectedOption, setSelectedOption] = useState(null)
   const [messages, setMessages] = useState([
@@ -222,10 +55,14 @@ function ChatBox({localPath, csvHeaders, status, setStatus, setCsvHeaders}) {
   const [selectedColumnsToDrop, setSelectedColumnsToDrop] = useState([])
   const [droppedColumns, setDroppedColumns] = useState([])
   const [userConstraints, setUserConstraints] = useState({})
+  const [fixedColumns, setFixedColumns] = useState({})
   const [target, setTarget] = useState({})
+  const [queryFeatures, setQueryFeatures] = useState({})
+  const [samples, setSamples] = useState({})
   const [showDropColumnSelector, setShowDropColumnSelector] = useState(false)
   const [queryType, setQueryType] = useState('recommend')
   const [finalJson, setFinalJson] = useState({})
+  const [quickOptions, setQuickOptions] = useState([])
   const messagesEndRef = useRef(null)
   const inputRef = useRef(null)
 
@@ -244,51 +81,283 @@ function ChatBox({localPath, csvHeaders, status, setStatus, setCsvHeaders}) {
   }, [selectedOption])
 
   const canSend = useMemo(() => input.trim().length > 0 && !isGenerating, [input, isGenerating])
-  const isChatDisabled = useMemo(() => status === '2' || status === '5', [status])
+  const isChatDisabled = useMemo(() => status === '2' || status === '8', [status])
 
-  // Memoize quick option handlers based on status
-  const handleQuickOption1 = useCallback(() => {
-    if (status === '3') {
-      const lastTwoHeaders = csvHeaders.slice(-2)
-      setInput(`Maximize ${lastTwoHeaders[0]}`)
-    } else if (status === '4') {
-      const thirdFourthHeaders = csvHeaders.slice(2, 4)
-      setInput(`Recommend on ${thirdFourthHeaders[0]} between (    ) to (    )`)
+  // Generate quick options based on status and csvHeaders
+  const generateQuickOptions = useCallback(() => {
+    const options = []
+    
+    if (status === '4') {
+      // Target Variables
+      if (csvHeaders.length >= 2) {
+        const lastTwoHeaders = csvHeaders.slice(-2)
+        options.push(
+          { text: `Maximize ${lastTwoHeaders[0]}`, action: () => setInput(`Maximize ${lastTwoHeaders[0]}`) },
+          { text: `Minimize ${lastTwoHeaders[1]}`, action: () => setInput(`Minimize ${lastTwoHeaders[1]}`) },
+          { text: `Set ${lastTwoHeaders[1]} between 10 and 100`, action: () => setInput(`Set ${lastTwoHeaders[1]} between 10 and 100`) }
+        )
+      }
+    } else if (status === '5') {
+      // Query Features
+      if (csvHeaders.length >= 4) {
+        const thirdFourthHeaders = csvHeaders.slice(2, 4)
+        options.push(
+          { text: `Recommend on ${thirdFourthHeaders[0]}`, action: () => setInput(`Recommend on ${thirdFourthHeaders[0]}`) },
+          { text: `Recommend on ${thirdFourthHeaders[1]}`, action: () => setInput(`Recommend on ${thirdFourthHeaders[1]}`) },
+          { text: `Recommend on ${thirdFourthHeaders[0]} and ${thirdFourthHeaders[1]}`, action: () => setInput(`Recommend on ${thirdFourthHeaders[0]} and ${thirdFourthHeaders[1]}`) }
+        )
+      }
     } else if (status === '6') {
-      setInput("Regression")
+      // User Constraints
+      if (csvHeaders.length >= 4) {
+        const thirdFourthHeaders = csvHeaders.slice(2, 4)
+        options.push(
+          { text: `I want ${thirdFourthHeaders[0]} between 10 and 100`, action: () => setInput(`I want ${thirdFourthHeaders[0]} between 10 and 100`) },
+          { text: `I want ${thirdFourthHeaders[1]} to be 50`, action: () => setInput(`I want ${thirdFourthHeaders[1]} to be 50`) },
+          { text: `I want ${thirdFourthHeaders[0]} less than 80`, action: () => setInput(`I want ${thirdFourthHeaders[0]} less than 80`) }
+        )
+      }
+    } else if (status === '7') {
+      // Analysis Type
+      options.push(
+        { text: 'Regression', action: () => setInput('Regression') },
+        { text: 'Classification', action: () => setInput('Classification') },
+        { text: 'Clustering', action: () => setInput('Clustering') }
+      )
     } else {
-      setInput("Can you help me analyze this data?")
+      // Default options
+      options.push(
+        { text: 'Can you help me analyze this data?', action: () => setInput('Can you help me analyze this data?') },
+        { text: 'What insights can you provide?', action: () => setInput('What insights can you provide?') },
+        { text: 'Can you suggest improvements?', action: () => setInput('Can you suggest improvements?') }
+      )
     }
+    
+    return options
   }, [status, csvHeaders])
 
-  const handleQuickOption2 = useCallback(() => {
-    if (status === '3') {
-      const lastTwoHeaders = csvHeaders.slice(-2)
-      setInput(`Minimize ${lastTwoHeaders[1]}`)
-    } else if (status === '4') {
-      const thirdFourthHeaders = csvHeaders.slice(2, 4)
-      setInput(`Recommend on ${thirdFourthHeaders[1]} between (    ) to (    )`)
-    } else if (status === '6') {
-      setInput("Classification")
-    } else {
-      setInput("What insights can you provide?")
-    }
-  }, [status, csvHeaders])
 
-  const handleQuickOption3 = useCallback(() => {
-    if (status === '3') {
-      const lastTwoHeaders = csvHeaders.slice(-2)
-      setInput(`Maximize ${lastTwoHeaders[1]}`)
-    } else if (status === '4') {
-      const thirdFourthHeaders = csvHeaders.slice(2, 4)
-      setInput(`Recommend on ${thirdFourthHeaders[0]} between (    ) to (     and ${thirdFourthHeaders[1]} between (    ) to (    ) )`)
-    } else if (status === '6') {
-      setInput("")
+  const parseTextAndMatchFeatures = (text) => {
+    
+    if (!text || typeof text !== 'string') {
+      console.log("No text provided");
+      return {};
     }
-    else {
-      setInput("Can you suggest improvements?")
+  
+    if (!csvHeaders || !Array.isArray(csvHeaders) || csvHeaders.length === 0) {
+      console.log("No valid feature list provided");
+      return {};
     }
-  }, [status, csvHeaders])
+  
+    const constraints = {};
+    const processedText = text.toLowerCase();
+    
+    console.log("Processing text:", processedText);
+    console.log("Status:", status);
+    console.log("Available features:", csvHeaders);
+  
+    // Helper function to find best matching feature
+    const findBestMatch = (rawFeature) => {
+      let cleanedFeature = rawFeature.toLowerCase().replace(/\s+/g, ' ').trim();
+      
+      // Remove common stopwords
+      const stopwords = ['the', 'a', 'an', 'my', 'set', 'change', 'make', 'recommend'];
+      for (const stopword of stopwords) {
+        if (cleanedFeature.startsWith(stopword + ' ')) {
+          cleanedFeature = cleanedFeature.slice(stopword.length).trim();
+          break;
+        }
+      }
+      
+      // Remove trailing generic terms
+      cleanedFeature = cleanedFeature.replace(/\b(column|field|value)s?\s*$/i, '').trim();
+      
+      let bestMatch = null;
+      let minDistance = Infinity;
+      const normalizedRawFeature = cleanedFeature.replace(/\s+/g, '');
+  
+      for (const canonicalFeature of csvHeaders) {
+        const strategies = [
+          canonicalFeature.toLowerCase().replace(/[_]/g, ''),
+          canonicalFeature.toLowerCase().replace(/_/g, ' ').replace(/\s+/g, ''),
+          canonicalFeature.toLowerCase().replace(/\s+/g, ''),
+          canonicalFeature.toLowerCase().replace(/_/g, ' ')
+        ];
+  
+        for (const normalizedCanonical of strategies) {
+          const distance = levenshteinDistance(normalizedRawFeature, normalizedCanonical);
+          if (distance < minDistance) {
+            minDistance = distance;
+            bestMatch = canonicalFeature;
+          }
+        }
+      }
+      
+      if (bestMatch && bestMatch.length > 0) {
+        const featureLength = Math.max(normalizedRawFeature.length, bestMatch.length);
+        const threshold = Math.max(2, Math.floor(featureLength * 0.4));
+        
+        if (minDistance <= threshold) {
+          console.log(`Matched "${rawFeature}" -> "${bestMatch}" (distance: ${minDistance})`);
+          return bestMatch;
+        }
+      }
+      
+      console.log(`No match found for "${rawFeature}"`);
+      return null;
+    };
+  
+    // Status 4: Target Variables - Maximize/minimize and set operations
+    if (status === '4') {
+      console.log("Processing status 4 patterns (Target Variables)");
+      
+      // Pattern 1: Maximize/minimize feature1, feature2,...
+      const maximizeMinimizePattern = /(?:maximize|minimize)\s+([a-zA-Z_][a-zA-Z0-9_\s,]+?)(?=\s*(?:and|,|$))/gi;
+      processedText.replace(maximizeMinimizePattern, (match, featuresString) => {
+        const operation = match.toLowerCase().includes('maximize') ? 'maximize' : 'minimize';
+        const featureNames = featuresString.split(',').map(f => f.trim()).filter(f => f.length > 0);
+        
+        for (const rawFeature of featureNames) {
+          const feature = findBestMatch(rawFeature);
+          if (feature) {
+            constraints[feature] = operation;
+            console.log(`Status 4 - ${operation}: ${feature}`);
+          }
+        }
+      });
+      
+      // Pattern 2: Set feature operations (comparison and range)
+      const setPattern = /set\s+([a-zA-Z_][a-zA-Z0-9_\s]*?)\s+(?:to be|=|is|<=|>=|<|>|less than or equal to|greater than or equal to|less than|more than|greater than|between)\s+([^,]+?)(?=\s*(?:,|$))/gi;
+      processedText.replace(setPattern, (match, featureName, valuePart) => {
+        const feature = findBestMatch(featureName);
+        if (feature) {
+          // Detect operator from the full match text
+          const opMatch = match.toLowerCase().match(/\s(to be|=|is|<=|>=|<|>|less than or equal to|greater than or equal to|less than|more than|greater than|between)\s/);
+          const operator = opMatch ? opMatch[1] : null;
+          if (operator === 'between') {
+            const rangeMatch = valuePart.match(/(\d+\.?\d*)\s*(?:and|to)\s*(\d+\.?\d*)/i);
+            if (rangeMatch) {
+              constraints[feature] = { min: parseFloat(rangeMatch[1]), max: parseFloat(rangeMatch[2]) };
+              console.log(`Status 4 - set range: ${feature} between ${rangeMatch[1]} and ${rangeMatch[2]}`);
+            }
+          } else if (operator === 'less than or equal to' || operator === '<=') {
+            const value = parseFloat(valuePart.trim());
+            constraints[feature] = { min: null, max: value };
+            console.log(`Status 4 - set <= : ${feature} <= ${value}`);
+          } else if (operator === 'greater than or equal to' || operator === '>=') {
+            const value = parseFloat(valuePart.trim());
+            constraints[feature] = { min: value, max: null };
+            console.log(`Status 4 - set >= : ${feature} >= ${value}`);
+          } else if (operator === 'less than' || operator === '<') {
+            const value = parseFloat(valuePart.trim());
+            constraints[feature] = { min: null, max: value };
+            console.log(`Status 4 - set < : ${feature} < ${value}`);
+          } else if (operator === 'more than' || operator === 'greater than' || operator === '>') {
+            const value = parseFloat(valuePart.trim());
+            constraints[feature] = { min: value, max: null };
+            console.log(`Status 4 - set > : ${feature} > ${value}`);
+          } else {
+            // Exact value
+            const value = parseFloat(valuePart.trim());
+            constraints[feature] = { min: value, max: value };
+            console.log(`Status 4 - set exact: ${feature} = ${value}`);
+          }
+        }
+      });
+    }
+    
+    // Status 5: Query Features - I want feature operations
+    else if (status === '6') {
+      console.log("Processing status 6 patterns (user constraints)");
+      
+      const wantPattern = /(?:i want\s+)?([a-zA-Z_][a-zA-Z0-9_\s]*?)\s+(?:is|to be|==|=|<=|>=|<|>|less than or equal to|greater than or equal to|less than|more than|greater than|between)\s+([^,]+?)(?=\s*(?:,|$))/gi;
+
+      // Protect 'and' inside ranges, then split clauses on ' and '
+      const protectedText = processedText.replace(/between\s+(\d+\.?\d*)\s+and\s+(\d+\.?\d*)/gi, (m, a, b) => `between ${a} __AND__ ${b}`);
+      const clauses = protectedText.split(/\s+and\s+/i);
+      for (const clause of clauses) {
+        const restored = clause.replace(/__AND__/g, 'and');
+        restored.replace(wantPattern, (match, featureName, valuePart) => {
+          const feature = findBestMatch(featureName);
+          if (feature) {
+            // Detect operator from the full match text
+            const opMatch = match.toLowerCase().match(/\s(is|to be|==|=|<=|>=|<|>|less than or equal to|greater than or equal to|less than|more than|greater than|between)\s/);
+            const operator = opMatch ? opMatch[1] : null;
+
+            if (operator === 'between') {
+              const rangeMatch = valuePart.match(/(\d+\.?\d*)\s*(?:and|to)\s*(\d+\.?\d*)/i);
+              if (rangeMatch) {
+                constraints[feature] = { min: parseFloat(rangeMatch[1]), max: parseFloat(rangeMatch[2]) };
+                console.log(`Status 5 - want range: ${feature} between ${rangeMatch[1]} and ${rangeMatch[2]}`);
+              }
+            } else if (operator === 'less than or equal to' || operator === '<=') {
+              const value = parseFloat(valuePart.trim());
+              constraints[feature] = { min: null, max: value };
+              console.log(`Status 5 - want <= : ${feature} <= ${value}`);
+            } else if (operator === 'greater than or equal to' || operator === '>=') {
+              const value = parseFloat(valuePart.trim());
+              constraints[feature] = { min: value, max: null };
+              console.log(`Status 5 - want >= : ${feature} >= ${value}`);
+            } else if (operator === 'less than' || operator === '<') {
+              const value = parseFloat(valuePart.trim());
+              constraints[feature] = { min: null, max: value };
+              console.log(`Status 5 - want < : ${feature} < ${value}`);
+            } else if (operator === 'more than' || operator === 'greater than' || operator === '>') {
+              const value = parseFloat(valuePart.trim());
+              constraints[feature] = { min: value, max: null };
+              console.log(`Status 5 - want > : ${feature} > ${value}`);
+            } else if (operator === '==') {
+              const rawWhole = valuePart.trim();
+              let rawValue = rawWhole;
+              let value;
+              // If quoted, extract inside quotes; else cut at ' and '
+              const quoteMatch = rawWhole.match(/^("|')(.*?)(\1)/);
+              if (quoteMatch) {
+                rawValue = quoteMatch[2];
+              } else {
+                rawValue = rawWhole.split(/\s+and\s+/i)[0];
+              }
+              rawValue = rawValue.replace(/[.,;]+$/, '').trim();
+              if (/^-?\d+(?:\.\d+)?$/.test(rawValue)) {
+                value = parseFloat(rawValue);
+              } else {
+                value = rawValue;
+              }
+              constraints[feature] = value;
+              console.log(`Status 5 - want exact (==): ${feature} == ${value}`);
+            } else if (operator === 'is' || operator === 'to be' || operator === '=') {
+              const value = parseFloat(valuePart.trim());
+              constraints[feature] = { min: value, max: value };
+              console.log(`Status 5 - want exact: ${feature} = ${value}`);
+            }
+          }
+        });
+      }
+ 
+       
+    }
+    
+    // Status 6: User Constraints - Recommend on features
+    else if (status === '5') {
+      console.log("Processing status 6 patterns (Query Features)");
+      
+      const recommendPattern = /(?:recommend on|recommend)\s+([a-zA-Z_][a-zA-Z0-9_\s,]+?)(?=\s*$)/gi;
+      processedText.replace(recommendPattern, (match, featuresString) => {
+        const featureNames = featuresString.split(/[,\s]+and\s+|[,\s]+/).map(f => f.trim()).filter(f => f.length > 0);
+        
+        for (const rawFeature of featureNames) {
+          const feature = findBestMatch(rawFeature);
+          if (feature) {
+            constraints[feature] = true; // Simple boolean for recommend
+            console.log(`Status 6 - recommend: ${feature}`);
+          }
+        }
+      });
+    }
+  
+    console.log("Final constraints:", constraints);
+    return constraints;
+  }
 
   // Memoize option selector handler
   const handleOptionSelected = useCallback((optionId) => {
@@ -300,6 +369,14 @@ function ChatBox({localPath, csvHeaders, status, setStatus, setCsvHeaders}) {
     setStatus('2') // Change status to show chat interface
   }, [setStatus])
 
+  // Handle done button click - increase status by 1
+  const handleDoneClick = useCallback(() => {
+    const currentStatus = parseInt(status)
+    if (currentStatus > 3 && currentStatus < 8) {
+      setStatus((currentStatus + 1).toString())
+    }
+  }, [status, setStatus])
+
   // Memoize computed values
   const userConstraintsCount = useMemo(() => Object.keys(userConstraints).length, [userConstraints])
   const targetCount = useMemo(() => Object.keys(target).length, [target])
@@ -307,49 +384,95 @@ function ChatBox({localPath, csvHeaders, status, setStatus, setCsvHeaders}) {
 
   // Define analyzePrompt before onSend to avoid circular dependency
   const analyzePrompt = useCallback((prompt) => {
-     const result = parseTextAndMatchFeatures(prompt, csvHeaders)
+     const result = parseTextAndMatchFeatures(prompt)
      console.log("Status", status)
-     if (status === '3')
+     if (status === '4')
     {
         console.log("Setting target" )
         setTarget(prev => ({ ...prev, ...result }))
     }
-     else if (status === '4'){
-      console.log("Setting user constraints" )
-
-     setUserConstraints(prev => ({ ...prev, ...result }))
+     else if (status === '5'){
+      console.log("Setting query features" )
+      setQueryFeatures(prev => ({ ...prev, ...result }))
+     }
+    else if (status === '6'){
+      console.log("Setting user constraints / fixed columns based on value types" )
+      const constraintsUpdates = {}
+      const fixedUpdates = {}
+      for (const [key, value] of Object.entries(result)) {
+        if (value && typeof value === 'object') {
+          constraintsUpdates[key] = value
+        } else if (typeof value === 'string') {
+          fixedUpdates[key] = value
+        } else {
+          // numbers, booleans, or other primitives -> treat as constraints
+          constraintsUpdates[key] = value
+        }
+      }
+      if (Object.keys(constraintsUpdates).length > 0) {
+        setUserConstraints(prev => ({ ...prev, ...constraintsUpdates }))
+      }
+      if (Object.keys(fixedUpdates).length > 0) {
+        setFixedColumns(prev => ({ ...prev, ...fixedUpdates }))
+      }
      }
      
      if (Object.keys(result).length === 0) {
-       if (status === '4') setStatus('show_user_constraints')
-       else if (status === '3') setStatus('show_target_variables')
+       if (status === '6') setStatus('show_user_constraints')
+       else if (status === '4') setStatus('show_target_variables')
+       else if (status === '5') setStatus('show_query_features')
        return `I couldn't find any specific constraints in your message. Could you please specify which columns you'd like to set constraints for? For example: '${csvHeaders[0]} between 10 and 100' or '${csvHeaders[1]} greater than 18`
      }
      
      let response = "I found the following constraints in your message:\n\n"
      for (const [column, constraint] of Object.entries(result)) {
        response += `• ${column}: `
-       if (constraint.min === 0 && constraint.max === 0) {
-         // Check if this was a maximize or minimize operation
-         const isMaximize = prompt.toLowerCase().includes('maximize');
-         const isMinimize = prompt.toLowerCase().includes('minimize');
-         if (isMaximize) {
-           response += `maximize (set to 0 for processing)\n`
-         } else if (isMinimize) {
-           response += `minimize (set to 0 for processing)\n`
-         } else {
-           response += `no specific constraints (set to 0)\n`
+       
+       // Handle different constraint types based on status
+       if (status === '4') {
+         // Status 4: Target Variables - Can return "maximize", "minimize", or {min, max} objects
+         if (constraint === 'maximize') {
+           response += `maximize\n`
+         } else if (constraint === 'minimize') {
+           response += `minimize\n`
+         } else if (typeof constraint === 'object' && constraint !== null) {
+           // Handle min/max objects
+           if (constraint.min !== null && constraint.max !== null) {
+             if (constraint.min === constraint.max) {
+               response += `set to ${constraint.min}\n`
+             } else {
+               response += `between ${constraint.min} and ${constraint.max}\n`
+             }
+           } else if (constraint.min !== null) {
+             response += `greater than or equal to ${constraint.min}\n`
+           } else if (constraint.max !== null) {
+             response += `less than or equal to ${constraint.max}\n`
+           }
          }
-       } else if (constraint.min !== null && constraint.max !== null) {
-         if (constraint.min === constraint.max) {
-           response += `set to ${constraint.min}\n`
-         } else {
-           response += `between ${constraint.min} and ${constraint.max}\n`
+      } else if (status === '6') {
+        // User Constraints and Fixed Columns
+        if (typeof constraint === 'object' && constraint !== null) {
+          if (constraint.min !== null && constraint.max !== null) {
+            if (constraint.min === constraint.max) {
+              response += `set to ${constraint.min}\n`
+            } else {
+              response += `between ${constraint.min} and ${constraint.max}\n`
+            }
+          } else if (constraint.min !== null) {
+            response += `greater than or equal to ${constraint.min}\n`
+          } else if (constraint.max !== null) {
+            response += `less than or equal to ${constraint.max}\n`
+          }
+        } else if (typeof constraint === 'string') {
+          response += `fixed to ${constraint}\n`
+        } else if (typeof constraint === 'number' && !Number.isNaN(constraint)) {
+          response += `set to ${constraint}\n`
+        }
+       } else if (status === '5') {
+         // Status 6: User Constraints - Returns boolean true for recommend
+         if (constraint === true) {
+           response += `recommend\n`
          }
-       } else if (constraint.min !== null) {
-         response += `greater than or equal to ${constraint.min}\n`
-       } else if (constraint.max !== null) {
-         response += `less than or equal to ${constraint.max}\n`
        }
      }
 
@@ -378,6 +501,7 @@ function ChatBox({localPath, csvHeaders, status, setStatus, setCsvHeaders}) {
 
     const userMessage = { id: crypto.randomUUID(), role: 'user', content }
     setMessages((prev) => [...prev, userMessage])
+
     if (content.includes("done")) {
       if (status !== '') {
         setStatus((parseInt(status) + 1).toString())
@@ -385,13 +509,13 @@ function ChatBox({localPath, csvHeaders, status, setStatus, setCsvHeaders}) {
       return
     }
 
-    if (status === '6') {
+    if (status === '7') {
       if (content.toLowerCase().includes('regression')) {
         setTaskType('Regression')
-        setStatus('7')
+        setStatus('8')
       } else if (content.toLowerCase().includes('classification')) {
         setTaskType('Classification')
-        setStatus('7')
+        setStatus('8')
       }
       else {
         const errorMessage = { 
@@ -476,7 +600,7 @@ function ChatBox({localPath, csvHeaders, status, setStatus, setCsvHeaders}) {
       content: `Great! You've set ${userConstraintsCount} constraints.` 
     }
     setMessages(prev => [...prev, finishMessage])
-    setStatus('5')
+    setStatus('7')
   }, [userConstraintsCount, setStatus])
 
   const getTarget = useCallback(() => {
@@ -508,6 +632,15 @@ function ChatBox({localPath, csvHeaders, status, setStatus, setCsvHeaders}) {
     setMessages(prev => [...prev, confirmMessage1, confirmMessage2])
   }, [])
 
+  const getQueryFeatures = useCallback(() => {
+    const headerMessage = { 
+      id: crypto.randomUUID(), 
+      role: 'assistant', 
+      content: `What features do you want the recommendation to be based on?` 
+    }
+    setMessages(prev => [...prev, headerMessage])
+  }, [])
+
   const handleFinishTargets = useCallback(() => {
     const finishMessage = { 
       id: crypto.randomUUID(), 
@@ -515,7 +648,7 @@ function ChatBox({localPath, csvHeaders, status, setStatus, setCsvHeaders}) {
       content: `Perfect! You've set ${targetCount} target variables.` 
     }
     setMessages(prev => [...prev, finishMessage])
-    setStatus('4')
+    setStatus('5')
   }, [targetCount, setStatus])
 
   useEffect(() => {
@@ -526,43 +659,53 @@ function ChatBox({localPath, csvHeaders, status, setStatus, setCsvHeaders}) {
   }, [input])
 
   useEffect(() => {
-    if (status === '6') {
+    if (status === '7') {
       getTaskType()
     }
   }, [status])
 
+  // Update quick options when status or csvHeaders change
   useEffect(() => {
-    if (status === '3') {
+    const options = generateQuickOptions()
+    setQuickOptions(options)
+  }, [generateQuickOptions])
+
+  useEffect(() => {
+    if (status === '4') {
       getTarget()
     }
   }, [status, getTarget])
 
   useEffect(() => {
-    if (status === '4') {
+    if (status === '5') {
+      getQueryFeatures()
+    }
+  }, [status, getQueryFeatures])
+
+  useEffect(() => {
+    if (status === '6') {
       getUserConstraints()
     }
   }, [status, getUserConstraints])
 
-
   useEffect(() => {
-    if (status === '7') {
+    if (status === '8') {
       const query_structure = {
-        "key": "PM-100_q1",
+        "key": `${datasetData.fileName}_${queryType}`,
         "file_name": localPath,
-        "is_subset_sampling_enabled": true,
+        "is_subset_sampling_enabled": isSubsetSamplingEnabled,
         "task_type": taskType,
         "dropped_columns": droppedColumns,
         "query_type": queryType,
         "target": target,
+        "fixed_columns": fixedColumns,
         "user_constraints": userConstraints,
-        // "fixed_columns": fixed_columns,
-        // "query_features": query_features,
-        // "samples": samples
+        "query_features": queryFeatures,
+        "samples": samples
       }
       setFinalJson(query_structure)
-      setStatus('8')
     }
-  }, [status, localPath, taskType, droppedColumns, queryType, target, userConstraints, setStatus])
+  }, [status, localPath, taskType, droppedColumns, queryType, target, userConstraints, setStatus, isSubsetSamplingEnabled, fixedColumns])
 
   useEffect(() => {
     if (status === '8') {
@@ -609,14 +752,33 @@ function ChatBox({localPath, csvHeaders, status, setStatus, setCsvHeaders}) {
 
   const handleDropColumns = useCallback(() => {
     if (selectedColumnsCount === 0) {
-      const noSelectionMessage = { 
+      // User chose to keep all columns
+      const keepAllMessage = { 
         id: crypto.randomUUID(), 
         role: 'user', 
-        content: 'No columns selected to drop.' 
+        content: 'Keeping all columns. No columns were dropped.' 
       }
-      setMessages(prev => [...prev, noSelectionMessage])
+      setMessages(prev => [...prev, keepAllMessage])
     } else {
+      // User dropped specific columns
       const remainingHeaders = csvHeaders.filter(header => !selectedColumnsToDrop.includes(header))
+      
+      // Find indices of columns to drop
+      const columnsToDropIndices = selectedColumnsToDrop.map(column => csvHeaders.indexOf(column))
+      
+      // Update dataset data by removing dropped columns from sample data
+      if (setDatasetData && datasetData) {
+        const updatedSampleData = datasetData.sampleData.map(row => 
+          row.filter((_, index) => !columnsToDropIndices.includes(index))
+        )
+        
+        setDatasetData({
+          ...datasetData,
+          headers: remainingHeaders,
+          sampleData: updatedSampleData
+        })
+      }
+      
       setCsvHeaders(remainingHeaders)
       setDroppedColumns(selectedColumnsToDrop)
       const dropMessage = { 
@@ -629,9 +791,9 @@ function ChatBox({localPath, csvHeaders, status, setStatus, setCsvHeaders}) {
     
     setSelectedColumnsToDrop([])
     setShowDropColumnSelector(false)
-    setStatus('6')
+    setStatus('4')
     // setStatus('columns_dropped')
-  }, [selectedColumnsCount, selectedColumnsToDrop, csvHeaders, setCsvHeaders, setStatus])
+  }, [selectedColumnsCount, selectedColumnsToDrop, csvHeaders, setCsvHeaders, setStatus, setDatasetData, datasetData])
 
   const handleCancelDropColumns = useCallback(() => {
     setSelectedColumnsToDrop([])
@@ -659,7 +821,7 @@ function ChatBox({localPath, csvHeaders, status, setStatus, setCsvHeaders}) {
       </div>
 
       <div className="chat-controls">
-        {status === '5' && (
+        {status === '3' && (
           <DropColumnSelector
             title="Drop Columns"
             description="Select columns to remove from your dataset"
@@ -703,50 +865,25 @@ function ChatBox({localPath, csvHeaders, status, setStatus, setCsvHeaders}) {
 
         <div className="chat-input-bar">
           {/* Quick options above the textbox */}
-          {!isChatDisabled && (
+          {!isChatDisabled && quickOptions.length > 0 && (
             <div className="quick-options">
-              {status === '6' ? (
-                <>
-                  <button 
-                    className="quick-option-btn"
-                    onClick={handleQuickOption1}
-                  >
-                    Regression
-                  </button>
-                  <button 
-                    className="quick-option-btn"
-                    onClick={handleQuickOption2}
-                  >
-                    Classification
-                  </button>
-                </>
-              ) : (
-                <>
-                  <button 
-                    className="quick-option-btn"
-                    onClick={handleQuickOption1}
-                  >
-                    {status === '3' && csvHeaders.length >= 2 ? `Maximize ${csvHeaders.slice(-2)[0]}` :
-                     status === '4' && csvHeaders.length >= 4 ? `Recommend ${csvHeaders.slice(2, 4)[0]}` :
-                     'Analyze Data'}
-                  </button>
-                  <button 
-                    className="quick-option-btn"
-                    onClick={handleQuickOption2}
-                  >
-                    {status === '3' && csvHeaders.length >= 2 ? `Minimize ${csvHeaders.slice(-2)[1]}` :
-                     status === '4' && csvHeaders.length >= 4 ? `Recommend ${csvHeaders.slice(2, 4)[1]}` :
-                     'Get Insights'}
-                  </button>
-                  <button 
-                    className="quick-option-btn"
-                    onClick={handleQuickOption3}
-                  >
-                    {status === '3' && csvHeaders.length >= 2 ? `Maximize ${csvHeaders.slice(-2)[1]}` :
-                     status === '4' && csvHeaders.length >= 4 ? `Recommend Both` :
-                     'Suggest Improvements'}
-                  </button>
-                </>
+              {quickOptions.map((option, index) => (
+                <button 
+                  key={index}
+                  className="quick-option-btn"
+                  onClick={option.action}
+                >
+                  {option.text}
+                </button>
+              ))}
+              {/* Done button - enabled if status > 2 */}
+              {parseInt(status) > 2 && parseInt(status) < 8 && (
+                <button 
+                  className="quick-option-btn done-btn"
+                  onClick={handleDoneClick}
+                >
+                  Done
+                </button>
               )}
               {/* <button 
                 className="quick-option-btn drop-columns-btn"

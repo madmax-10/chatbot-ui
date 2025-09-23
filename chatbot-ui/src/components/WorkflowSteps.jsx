@@ -2,9 +2,8 @@ import { useCallback, useMemo, useState, memo } from 'react'
 import DataFileInput from './DataFileInput'
 import DatasetPreview from './DatasetPreview'
 
-const WorkflowSteps = memo(({ localPath = '', setLocalPath, setCsvHeaders, status, setStatus}) => {
+const WorkflowSteps = memo(({setDatasetData, localPath = '', setLocalPath, setCsvHeaders, status, setStatus}) => {
   const [expandedRequirement, setExpandedRequirement] = useState(null)
-  const [datasetData, setDatasetData] = useState(null)
 
   // Memoize requirements array to prevent recreation on every render
   const requirements = useMemo(() => [
@@ -24,35 +23,42 @@ const WorkflowSteps = memo(({ localPath = '', setLocalPath, setCsvHeaders, statu
     },
     {
       id: 'drop-columns',
-      number: 5,
+      number: 3,
       title: 'Drop Columns',
       description: 'Remove unnecessary columns from your dataset',
       icon: '🗑️'
     },
     {
       id: 'target-variables',
-      number: 3,
+      number: 4,
       title: 'Target Variables',
       description: 'Define your target variables and their ranges',
       icon: '🎯'
     },
     {
+      id: 'query-features',
+      number: 5,
+      title: 'Query Features',
+      description: 'Select features for your query and analysis',
+      icon: '🔍'
+    },
+    {
       id: 'user-constraints',
-      number: 4,
+      number: 6,
       title: 'User Constraints',
       description: 'Set constraints and parameters for analysis',
       icon: '⚙️'
     },
     {
       id: 'analysis',
-      number: 6,
+      number: 7,
       title: 'Analysis',
       description: 'Run analysis and get insights',
       icon: '📊'
     },
     {
       id: 'results',
-      number: 7,
+      number: 8,
       title: 'Results',
       description: 'View and export your results',
       icon: '📈'
@@ -131,7 +137,6 @@ const WorkflowSteps = memo(({ localPath = '', setLocalPath, setCsvHeaders, statu
           })}
         </div>
         
-        <DatasetPreview datasetData={datasetData} />
       </div>
     )
 })

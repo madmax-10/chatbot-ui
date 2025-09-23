@@ -1,29 +1,17 @@
 import { useState, useEffect } from 'react'
 import './App.css'
 import ChatBox from './components/ChatBox'
-import WorkflowSteps from './components/WorkflowSteps'
+import DatasetPreview from './components/DatasetPreview'
+import DataFileInput from './components/DataFileInput'
 
 function App() {
   const [csvHeaders, setCsvHeaders] = useState([])
-  const [completedRequirements, setCompletedRequirements] = useState([])
   const [status, setStatus] = useState('1')
   const [localPath, setLocalPath] = useState('')
+  const [datasetData, setDatasetData] = useState(null)
+  const [isSubsetSamplingEnabled, setIsSubsetSamplingEnabled] = useState(false)
 
-  // Automatically update completed requirements based on app state
-  useEffect(() => {
-    // console.log('csvHeaders updated:', csvHeaders)
-    const completed = []
-    
-    // Mark datafile as completed if CSV headers are loaded
-    if (csvHeaders.length > 0) {
-      completed.push('datafile')
-    }
-    
-    // You can add more logic here to mark other requirements as completed
-    // based on user actions in the chat or other components
-    
-    setCompletedRequirements(completed)
-  }, [csvHeaders])
+
 
   
 
@@ -36,17 +24,29 @@ function App() {
       </header>
       <div className="main-layout">
         <div className="left-panel">
-          <WorkflowSteps
+          <DataFileInput
             localPath={localPath}
             setLocalPath={setLocalPath}
-            setCsvHeaders={setCsvHeaders} 
-            status={status}
-            completedRequirements={completedRequirements}
             setStatus={setStatus}
+            setCsvHeaders={setCsvHeaders}
+            setDatasetData={setDatasetData}
+            isSubsetSamplingEnabled={isSubsetSamplingEnabled}
+            setIsSubsetSamplingEnabled={setIsSubsetSamplingEnabled}
           />
         </div>
         <div className="right-panel">
-          <ChatBox localPath={localPath} csvHeaders={csvHeaders} status={status} setStatus={setStatus} setCsvHeaders={setCsvHeaders}/>
+          {csvHeaders.length > 0 ? (
+            <div className="right-panel-split">
+              <div className="right-panel-top">
+                <DatasetPreview datasetData={datasetData} />
+              </div>
+              <div className="right-panel-bottom">
+                <ChatBox localPath={localPath} csvHeaders={csvHeaders} status={status} setStatus={setStatus} setCsvHeaders={setCsvHeaders} datasetData={datasetData} setDatasetData={setDatasetData} isSubsetSamplingEnabled={isSubsetSamplingEnabled} />
+              </div>
+            </div>
+          ) : (
+            <ChatBox localPath={localPath} csvHeaders={csvHeaders} status={status} setStatus={setStatus} setCsvHeaders={setCsvHeaders} datasetData={datasetData} setDatasetData={setDatasetData} isSubsetSamplingEnabled={isSubsetSamplingEnabled} />
+          )}
         </div>
       </div>
     </div>

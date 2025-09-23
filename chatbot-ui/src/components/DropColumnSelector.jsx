@@ -2,7 +2,7 @@ import { useCallback, useMemo, useState, memo } from 'react'
 
 const DropColumnSelector = memo(({ 
   title = "Drop Columns", 
-  description = "Select columns to remove from your dataset", 
+  description = "Select columns to remove from your dataset (or keep all columns)", 
   columns, 
   onDrop, 
   onCancel,
@@ -22,12 +22,8 @@ const DropColumnSelector = memo(({
   }, [onColumnToggle])
 
   const handleDrop = useCallback(() => {
-    if (selectedCount === 0) {
-      alert('Please select at least one column to drop')
-      return
-    }
     onDrop()
-  }, [selectedCount, onDrop])
+  }, [onDrop])
 
   const handleSelectAll = useCallback(() => {
     columns.forEach(column => {
@@ -97,7 +93,11 @@ const DropColumnSelector = memo(({
                   <input
                     type="checkbox"
                     checked={isSelected}
-                    onChange={() => handleColumnToggle(column)}
+                    readOnly
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      handleColumnToggle(column)
+                    }}
                     className="drop-column-checkbox"
                   />
                   <span className="drop-column-name">{column}</span>
@@ -137,9 +137,8 @@ const DropColumnSelector = memo(({
           <button 
             onClick={handleDrop}
             className="drop-column-drop-button"
-            disabled={selectedCount === 0}
           >
-            Drop {selectedCount} Column{selectedCount !== 1 ? 's' : ''}
+            {selectedCount === 0 ? 'Keep All Columns' : `Drop ${selectedCount} Column${selectedCount !== 1 ? 's' : ''}`}
           </button>
         </div>
       </div>
