@@ -556,7 +556,7 @@ function ChatBox({localPath, csvHeaders, status, setStatus, setCsvHeaders, datas
     const headerMessage = { 
       id: crypto.randomUUID(), 
       role: 'assistant', 
-      content: `Is there any particular feature you want me to recommend? If you have multiple of them, you can separate them using commas. Please add constraints if you have any. `
+      content: 'Do you have any extra constraints you want me to consider? If you have multiple of them, you can separate them using commas.'
     }
     setMessages(prev => [...prev, headerMessage])
   }, [])
