@@ -58,7 +58,7 @@ function ChatBox({localPath, csvHeaders, status, setStatus, setCsvHeaders, datas
   const [fixedColumns, setFixedColumns] = useState({})
   const [target, setTarget] = useState({})
   const [queryFeatures, setQueryFeatures] = useState({})
-  const [samples, setSamples] = useState({})
+  const [samples, setSamples] = useState([])
   const [showDropColumnSelector, setShowDropColumnSelector] = useState(false)
   const [queryType, setQueryType] = useState('recommend')
   const [finalJson, setFinalJson] = useState({})
@@ -212,10 +212,10 @@ function ChatBox({localPath, csvHeaders, status, setStatus, setCsvHeaders, datas
       console.log("Processing status 4 patterns (Target Variables)");
       
       // Pattern 1: Maximize/minimize feature1, feature2,...
-      const maximizeMinimizePattern = /(?:maximize|minimize)\s+([a-zA-Z_][a-zA-Z0-9_\s,]+?)(?=\s*(?:and|,|$))/gi;
+      const maximizeMinimizePattern = /(?:maximize|minimize)\s+([a-zA-Z_][a-zA-Z0-9_\s,]+?)(?=\s*(?:,|$))/gi;
       processedText.replace(maximizeMinimizePattern, (match, featuresString) => {
         const operation = match.toLowerCase().includes('maximize') ? 'maximize' : 'minimize';
-        const featureNames = featuresString.split(',').map(f => f.trim()).filter(f => f.length > 0);
+        const featureNames = featuresString.split('and').map(f => f.trim()).filter(f => f.length > 0);
         
         for (const rawFeature of featureNames) {
           const feature = findBestMatch(rawFeature);
@@ -544,13 +544,32 @@ function ChatBox({localPath, csvHeaders, status, setStatus, setCsvHeaders, datas
     }
   }, [input, analyzePrompt, streamText])
 
+  // Generate placeholder text from quickOptions for status 4, 5, 6
+  const generatePlaceholderText = useCallback(() => {
+    if (['4', '5', '6'].includes(status) && quickOptions.length > 0) {
+      return quickOptions.map(option => option.text).join(', ')
+    }
+    return "Message Assistant"
+  }, [status, quickOptions])
+
   const handleKeyDown = useCallback((e) => {
     if (isChatDisabled) return
+    
+    // Handle Tab key to auto-fill placeholder text
+    if (e.key === 'Tab' && ['4', '5', '6'].includes(status) && quickOptions.length > 0 && input.trim() === '') {
+      e.preventDefault()
+      const placeholderText = generatePlaceholderText()
+      if (placeholderText !== "Message Assistant") {
+        setInput(placeholderText)
+      }
+      return
+    }
+    
     if (e.key === 'Enter' && !e.shiftKey && !e.altKey && !e.metaKey && !e.ctrlKey) {
       e.preventDefault()
       if (canSend) onSend()
     }
-  }, [canSend, onSend, isChatDisabled])
+  }, [canSend, onSend, isChatDisabled, status, quickOptions, input, generatePlaceholderText])
 
   const getUserConstraints = useCallback(() => {
     const headerMessage = { 
@@ -668,7 +687,7 @@ function ChatBox({localPath, csvHeaders, status, setStatus, setCsvHeaders, datas
   useEffect(() => {
     const options = generateQuickOptions()
     setQuickOptions(options)
-  }, [generateQuickOptions])
+  }, [status,csvHeaders,generateQuickOptions])
 
   useEffect(() => {
     if (status === '4') {
@@ -701,11 +720,11 @@ function ChatBox({localPath, csvHeaders, status, setStatus, setCsvHeaders, datas
         "fixed_columns": fixedColumns,
         "user_constraints": userConstraints,
         "query_features": queryFeatures,
-        "samples": samples
+        ...(samples.length > 0 && { "samples": samples })
       }
       setFinalJson(query_structure)
     }
-  }, [status, localPath, taskType, droppedColumns, queryType, target, userConstraints, setStatus, isSubsetSamplingEnabled, fixedColumns])
+  }, [status, localPath, taskType, droppedColumns, queryType, target, userConstraints, setStatus, isSubsetSamplingEnabled, fixedColumns, samples])
 
   useEffect(() => {
     if (status === '8') {
@@ -898,13 +917,16 @@ function ChatBox({localPath, csvHeaders, status, setStatus, setCsvHeaders, datas
           <div className="chat-input-container">
             <textarea
               className="chat-input"
-              placeholder="Message Assistant"
+              placeholder={generatePlaceholderText()}
               value={input}
               onChange={(e) => setInput(e.target.value)}
               onKeyDown={handleKeyDown}
               ref={inputRef}
               rows={1}
               disabled={isChatDisabled}
+              style={{
+                '--placeholder-color': ['4', '5', '6'].includes(status) && quickOptions.length > 0 ? '#9ca3af' : '#6b7280'
+              }}
             />
             <button
               className="send-button"

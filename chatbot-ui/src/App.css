@@ -283,6 +283,10 @@
   border-color: #5b8cff;
   box-shadow: 0 0 0 1px #5b8cff22;
 }
+
+.chat-input::placeholder {
+  color: var(--placeholder-color, #6b7280);
+}
 .send-button {
   border: 1px solid #30363d;
   background: linear-gradient(180deg, #0f0f0f, #0b0b0b);
