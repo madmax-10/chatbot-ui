@@ -1098,122 +1098,117 @@ function ChatBox({
 
   return (
     <div className="chat-box">
-      <div className="chat-messages">
-        {messages.map((m) => (
-          <MessageBubble key={m.id} role={m.role} content={m.content} />
-        ))}
-        {isGenerating && partial && (
-          <MessageBubble role="assistant" content={partial} isStreaming />
-        )}
-        <div ref={messagesEndRef} />
-      </div>
+      {status === "4" ? (
+        <DropColumnSelector
+          title="Drop Columns"
+          description="Select columns to remove from your dataset"
+          columns={csvHeaders}
+          onDrop={handleDropColumns}
+          onCancel={handleCancelDropColumns}
+          selectedColumnsToDrop={selectedColumnsToDrop}
+          onColumnToggle={handleColumnToggle}
+        />
+      ) : (
+        <>
+          <div className="chat-messages">
+            {messages.map((m) => (
+              <MessageBubble key={m.id} role={m.role} content={m.content} />
+            ))}
+            {isGenerating && partial && (
+              <MessageBubble role="assistant" content={partial} isStreaming />
+            )}
+            <div ref={messagesEndRef} />
+          </div>
 
-      <div className="chat-controls">
-        {status === "4" && (
-          <DropColumnSelector
-            title="Drop Columns"
-            description="Select columns to remove from your dataset"
-            columns={csvHeaders}
-            onDrop={handleDropColumns}
-            onCancel={handleCancelDropColumns}
-            selectedColumnsToDrop={selectedColumnsToDrop}
-            onColumnToggle={handleColumnToggle}
-          />
-        )}
+          <div className="chat-controls">
+            {status === "show_user_constraints" && (
+              <ColumnSelector
+                title="Set Constraints"
+                description="Select columns and specify minimum and maximum values"
+                columns={csvHeaders}
+                onAdd={handleAddConstraint}
+                onFinish={handleFinishConstraints}
+                existingItems={userConstraints}
+                buttonText="Add Constraint"
+                finishButtonText="Finish"
+                showFinishButton={true}
+                allowMultiple={true}
+              />
+            )}
 
-        {status === "show_user_constraints" && (
-          <ColumnSelector
-            title="Set Constraints"
-            description="Select columns and specify minimum and maximum values"
-            columns={csvHeaders}
-            onAdd={handleAddConstraint}
-            onFinish={handleFinishConstraints}
-            existingItems={userConstraints}
-            buttonText="Add Constraint"
-            finishButtonText="Finish"
-            showFinishButton={true}
-            allowMultiple={true}
-          />
-        )}
+            {status === "show_target_variables" && (
+              <ColumnSelector
+                title="Set Target Variables"
+                description="Select target columns and specify their minimum and maximum values"
+                columns={csvHeaders}
+                onAdd={handleSetTarget}
+                onFinish={handleFinishTargets}
+                existingItems={target}
+                buttonText="Add Target Variable"
+                finishButtonText="Finish"
+                showFinishButton={true}
+                allowMultiple={true}
+              />
+            )}
 
-        {status === "show_target_variables" && (
-          <ColumnSelector
-            title="Set Target Variables"
-            description="Select target columns and specify their minimum and maximum values"
-            columns={csvHeaders}
-            onAdd={handleSetTarget}
-            onFinish={handleFinishTargets}
-            existingItems={target}
-            buttonText="Add Target Variable"
-            finishButtonText="Finish"
-            showFinishButton={true}
-            allowMultiple={true}
-          />
-        )}
-
-        <div className="chat-input-bar">
-          {/* Quick options above the textbox */}
-          {!isChatDisabled && quickOptions.length > 0 && (
-            <div className="quick-options">
-              {quickOptions.map((option, index) => (
-                <button
-                  key={index}
-                  className="quick-option-btn"
-                  onClick={option.action}
-                >
-                  {option.text}
-                </button>
-              ))}
-              {/* Done button - enabled if status > 2 */}
-              {parseInt(status) > 2 && parseInt(status) < 8 && (
-                <button
-                  className="quick-option-btn done-btn"
-                  onClick={handleDoneClick}
-                >
-                  Done
-                </button>
+            <div className="chat-input-bar">
+              {/* Quick options above the textbox */}
+              {!isChatDisabled && quickOptions.length > 0 && (
+                <div className="quick-options">
+                  {quickOptions.map((option, index) => (
+                    <button
+                      key={index}
+                      className="quick-option-btn"
+                      onClick={option.action}
+                    >
+                      {option.text}
+                    </button>
+                  ))}
+                  {/* Done button - enabled if status > 2 */}
+                  {parseInt(status) > 2 && parseInt(status) < 8 && (
+                    <button
+                      className="quick-option-btn done-btn"
+                      onClick={handleDoneClick}
+                    >
+                      Done
+                    </button>
+                  )}
+                </div>
               )}
-              {/* <button 
-                className="quick-option-btn drop-columns-btn"
-                onClick={handleShowDropColumnSelector}
-                disabled={showDropColumnSelector}
-              >
-                Drop Columns
-              </button> */}
-            </div>
-          )}
 
-          <div className="chat-input-container">
-            <textarea
-              className="chat-input"
-              placeholder={generatePlaceholderText()}
-              value={input}
-              onChange={(e) => setInput(e.target.value)}
-              onKeyDown={handleKeyDown}
-              ref={inputRef}
-              rows={1}
-              disabled={isChatDisabled}
-              style={{
-                "--placeholder-color":
-                  ["4", "5", "6"].includes(status) && quickOptions.length > 0
-                    ? "#9ca3af"
-                    : "#6b7280",
-              }}
-            />
-            <button
-              className="send-button"
-              onClick={() => onSend()}
-              disabled={!canSend || isChatDisabled}
-              aria-label="Send"
-            >
-              <SendIcon disabled={!canSend} />
-            </button>
+              <div className="chat-input-container">
+                <textarea
+                  className="chat-input"
+                  placeholder={generatePlaceholderText()}
+                  value={input}
+                  onChange={(e) => setInput(e.target.value)}
+                  onKeyDown={handleKeyDown}
+                  ref={inputRef}
+                  rows={1}
+                  disabled={isChatDisabled}
+                  style={{
+                    "--placeholder-color":
+                      ["4", "5", "6"].includes(status) && quickOptions.length > 0
+                        ? "#9ca3af"
+                        : "#6b7280",
+                  }}
+                />
+                <button
+                  className="send-button"
+                  onClick={() => onSend()}
+                  disabled={!canSend || isChatDisabled}
+                  aria-label="Send"
+                >
+                  <SendIcon disabled={!canSend} />
+                </button>
+              </div>
+              <div className="chat-disclaimer">
+                This is a local demo. No messages are stored.
+              </div>
+            </div>
           </div>
-          <div className="chat-disclaimer">
-            This is a local demo. No messages are stored.
-          </div>
-        </div>
-      </div>
+        </>
+      )}
     </div>
   );
 }

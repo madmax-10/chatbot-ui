@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import './App.css'
+import './light-app.css'
 import ChatBox from './components/ChatBox'
 import DatasetPreview from './components/DatasetPreview'
 import DataFileInput from './components/DataFileInput'
@@ -35,11 +35,21 @@ function App() {
   
   const statusText = getStatusText(status)
 
+  // Function to reset the application to start
+  const handleCompassClick = () => {
+    setStatus('1')
+    setCsvHeaders([])
+    setLocalPath('')
+    setDatasetData(null)
+    setIsSubsetSamplingEnabled(false)
+    setQueryType('recommend')
+  }
+
   return (
     <div className="chat-root">
       <header className="chat-header">
         <div className="chat-header-content">
-          <div className="chat-header-title">Data Analysis Assistant</div>
+          <div className="chat-header-title" onClick={handleCompassClick} style={{cursor: 'pointer'}}>Compass</div>
           <div className="chat-header-sub">Upload your data and start analyzing</div>
         </div>
         <div className="chat-header-actions">
