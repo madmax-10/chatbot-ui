@@ -1,11 +1,11 @@
 import { useCallback, useMemo, useState, memo } from 'react'
 import Papa from 'papaparse'
 
-const DataFileInput = memo(({ localPath = '', setLocalPath = () => {}, setStatus,setCsvHeaders, setDatasetData, isSubsetSamplingEnabled = false, setIsSubsetSamplingEnabled = () => {} }) => {
+const DataFileInput = memo(({queryType, localPath = '', setLocalPath = () => {}, setStatus,setCsvHeaders, setDatasetData, isSubsetSamplingEnabled = false, setIsSubsetSamplingEnabled = () => {} }) => {
   const [inputType, setInputType] = useState('local') // 'local' or 'url'
   const [selectedFile, setSelectedFile] = useState(null)
   const [urlPath, setUrlPath] = useState('')
-  const [isLoading, setIsLoading] = useState(false)
+  const [isLoading, setIsLoading]= useState(false)
 
   // Memoize computed values
   const isUrlValid = useMemo(() => urlPath.trim().length > 0, [urlPath])
@@ -53,7 +53,12 @@ const DataFileInput = memo(({ localPath = '', setLocalPath = () => {}, setStatus
         } 
         // Advance status only when both a file is uploaded and a local path is provided
         if (setStatus && localPath.trim()) {
-          setStatus('3')
+          if (queryType === 'recommend') {
+            setStatus('4')
+          }
+          else {
+            setStatus('3')
+          }
         }
           
         }
@@ -105,7 +110,12 @@ const DataFileInput = memo(({ localPath = '', setLocalPath = () => {}, setStatus
               setDatasetData({ fileName, headers, sampleData })
             }
             if (setStatus) {
-              setStatus('3')
+              if (queryType === 'recommend') {
+                setStatus('4')
+              }
+              else {
+                setStatus('3')
+              }
             }
             setIsLoading(false)
           } else {
@@ -150,30 +160,36 @@ const DataFileInput = memo(({ localPath = '', setLocalPath = () => {}, setStatus
     if (!localPath.trim()) return
     // If a file has already been selected and parsed (isLoading false), mark ready
     if (selectedFile && !isLoading && setStatus) {
-      setStatus('3')
+      if (queryType === 'recommend') {
+        setStatus('4')
+      } else {
+        setStatus('3')
+      }
     }
-  }, [localPath, selectedFile, isLoading, setStatus])
+  }, [localPath, selectedFile, isLoading, setStatus, queryType])
 
   return (
     <div className="data-file-input" onClick={handleClick}>
-      <div className="toggle-large-dataset" style={{ marginBottom: '10px' }}>
-        <label style={{ display: 'block', marginBottom: '6px' }}>Is your dataset very large?</label>
-        <div className="yes-no-toggle" role="group" aria-label="Large dataset toggle">
-          <button
-            className={`input-type-btn big-yes-btn ${isSubsetSamplingEnabled ? 'active' : ''}`}
-            onClick={(e) => { e.stopPropagation(); setIsSubsetSamplingEnabled(true) }}
-            type="button"
-          >
-            Yes
-          </button>
-          <button
-            className={`input-type-btn big-no-btn ${!isSubsetSamplingEnabled ? 'active' : ''}`}
+      {/* Option 1: Interactive Card Selection */}
+      <div className="dataset-size-selector">
+        <div className="dataset-size-title">Dataset Size</div>
+        <div className="dataset-size-cards">
+          <div 
+            className={`dataset-size-card ${!isSubsetSamplingEnabled ? 'active' : ''}`}
             onClick={(e) => { e.stopPropagation(); setIsSubsetSamplingEnabled(false) }}
-            type="button"
-            style={{ marginLeft: '6px' }}
           >
-            No
-          </button>
+            <span className="dataset-size-icon">📊</span>
+            <div className="dataset-size-label">Small to Medium</div>
+            <div className="dataset-size-description">Under 10MB or 100K rows</div>
+          </div>
+          <div 
+            className={`dataset-size-card ${isSubsetSamplingEnabled ? 'active' : ''}`}
+            onClick={(e) => { e.stopPropagation(); setIsSubsetSamplingEnabled(true) }}
+          >
+            <span className="dataset-size-icon">🚀</span>
+            <div className="dataset-size-label">Large Dataset</div>
+            <div className="dataset-size-description">Over 10MB or 100K rows</div>
+          </div>
         </div>
       </div>
       <div className="input-type-selector">
